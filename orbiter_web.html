@@ -166,6 +166,26 @@
       backdrop-filter: blur(6px);
     }
 
+    #noradPanel {
+      position: absolute;
+      left: 16px;
+      top: 104px;
+      width: min(330px, calc(100% - 32px));
+      max-height: calc(100% - 140px);
+      overflow: hidden;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      color: #e5edf8;
+      background: rgba(10, 16, 32, 0.66);
+      font-size: 12px;
+      line-height: 1.34;
+      white-space: pre-line;
+      pointer-events: none;
+      backdrop-filter: blur(6px);
+      display: none;
+    }
+
     #error {
       position: absolute;
       right: 16px;
@@ -368,6 +388,14 @@
         right: 10px;
         max-width: calc(100vw - 20px);
       }
+
+      #noradPanel {
+        left: 10px;
+        top: 92px;
+        width: calc(100vw - 92px);
+        max-height: calc(42vh - 104px);
+        font-size: 11px;
+      }
     }
   </style>
 </head>
@@ -380,6 +408,22 @@
         <legend>Готовая орбита</legend>
         <select id="preset"></select>
         <div id="preset-info" class="note"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Реальное время</legend>
+        <label>Группа <select id="realtimeGroup">
+          <option value="STATIONS">STATIONS</option>
+          <option value="ACTIVE">ACTIVE</option>
+          <option value="VISUAL">VISUAL</option>
+          <option value="WEATHER">WEATHER</option>
+          <option value="RESOURCE">RESOURCE</option>
+          <option value="GPS-OPS">GPS-OPS</option>
+        </select></label>
+        <label>Аппарат <select id="realtimeSatellite"></select></label>
+        <label>Спутник <input id="realtimeQuery" type="text" value="ISS"></label>
+        <button class="wide" id="loadRealtime">Загрузить SGP4/UTC</button>
+        <div id="realtimeInfo" class="note"></div>
       </fieldset>
 
       <fieldset>
@@ -437,6 +481,7 @@
 
     <main id="scene">
       <div id="hud">t = 0.0 мин<br>V = 0.000 км/с</div>
+      <div id="noradPanel"></div>
       <nav id="view-panel" aria-label="Управление видом">
         <button id="viewGeneral" class="view-home active" type="button" aria-label="Домой над Москвой" title="Домой над Москвой">⌂</button>
         <div class="view-compass" aria-label="Компас вида">
@@ -460,12 +505,20 @@
         </div>
         <div class="plane-switches">
           <label class="plane-switch" title="Показать плоскость экватора">
-            <input id="showEquatorPlane" type="checkbox" checked>
+            <input id="showEquatorPlane" type="checkbox">
             <span>EQ</span>
           </label>
           <label class="plane-switch" title="Показать плоскость эклиптики">
-            <input id="showEclipticPlane" type="checkbox" checked>
+            <input id="showEclipticPlane" type="checkbox">
             <span>ECL</span>
+          </label>
+          <label class="plane-switch" title="Показать оси X/Y/Z">
+            <input id="showAxes" type="checkbox">
+            <span>AX</span>
+          </label>
+          <label class="plane-switch" title="Показать радиус-вектор спутника">
+            <input id="showRadiusVector" type="checkbox">
+            <span>R</span>
           </label>
         </div>
       </nav>
@@ -493,6 +546,8 @@
     const DEFAULT_SPEED = Math.sqrt(MU / DEFAULT_RADIUS);
     const MAX_STEPS = 200000;
     const MAX_RENDER_POINTS = 12000;
+    const TRAIL_WINDOW_MIN = 35.0;
+    const REALTIME_REFRESH_MS = 5 * 60 * 1000;
     const EARTH_OBLIQUITY_DEG = 23.439281;
     const MOSCOW_HOME = Object.freeze({
       label: 'Москва',
@@ -507,6 +562,34 @@
       twoBody: 'Двухтельная модель: точечная Земля, без J2, атмосферы и третьих тел.',
       j2: 'Двухтельная модель + J2 Земли, без атмосферы, тяги и третьих тел.'
     };
+    const realtimeGroupDefaults = Object.freeze({
+      STATIONS: 'ISS',
+      ACTIVE: 'ISS',
+      VISUAL: 'HST',
+      WEATHER: 'METEOR-M',
+      RESOURCE: 'RESURS-P',
+      'GPS-OPS': 'GPS'
+    });
+    const realtimeCatalogSatellites = Object.freeze([
+      { id: 'stations-iss', group: 'STATIONS', label: 'МКС', query: 'ISS', noradCatId: '25544' },
+      { id: 'active-iss', group: 'ACTIVE', label: 'МКС', query: 'ISS', noradCatId: '25544' },
+      { id: 'visual-hst', group: 'VISUAL', label: 'Hubble Space Telescope', query: 'HST', noradCatId: '20580' },
+      { id: 'weather-meteor-m2', group: 'WEATHER', label: 'Метеор-М 2', query: 'METEOR-M 2', noradCatId: '40069' },
+      { id: 'weather-meteor-m2-2', group: 'WEATHER', label: 'Метеор-М2 2', query: 'METEOR-M2 2', noradCatId: '44387' },
+      { id: 'weather-meteor-m2-3', group: 'WEATHER', label: 'Метеор-М2 3', query: 'METEOR-M2 3', noradCatId: '57166' },
+      { id: 'weather-meteor-m2-4', group: 'WEATHER', label: 'Метеор-М2 4', query: 'METEOR-M2 4', noradCatId: '59051' },
+      { id: 'weather-noaa-20', group: 'WEATHER', label: 'NOAA 20', query: 'NOAA 20', noradCatId: '43013' },
+      { id: 'weather-noaa-21', group: 'WEATHER', label: 'NOAA 21', query: 'NOAA 21', noradCatId: '54234' },
+      { id: 'resource-resurs-p4', group: 'RESOURCE', label: 'Ресурс-П 4', query: 'RESURS-P 4', noradCatId: '59371' },
+      { id: 'resource-resurs-p5', group: 'RESOURCE', label: 'Ресурс-П 5', query: 'RESURS-P 5', noradCatId: '62430' },
+      { id: 'resource-kanopus-v3', group: 'RESOURCE', label: 'Канопус-В 3', query: 'KANOPUS-V 3', noradCatId: '43180' },
+      { id: 'resource-kanopus-v4', group: 'RESOURCE', label: 'Канопус-В 4', query: 'KANOPUS-V 4', noradCatId: '43181' },
+      { id: 'resource-kanopus-v5', group: 'RESOURCE', label: 'Канопус-В 5', query: 'KANOPUS-V 5', noradCatId: '43876' },
+      { id: 'resource-kanopus-v6', group: 'RESOURCE', label: 'Канопус-В 6', query: 'KANOPUS-V 6', noradCatId: '43877' },
+      { id: 'resource-kondor-fka-1', group: 'RESOURCE', label: 'Кондор-ФКА 1', query: 'KONDOR-FKA 1', noradCatId: '56756' },
+      { id: 'resource-kondor-fka-2', group: 'RESOURCE', label: 'Кондор-ФКА 2', query: 'KONDOR-FKA 2', noradCatId: '62138' },
+      { id: 'gps-ops-query', group: 'GPS-OPS', label: 'GPS operational', query: 'GPS', noradCatId: '' }
+    ]);
 
     const presets = {
       'Пользовательская': null,
@@ -602,12 +685,14 @@
 
     const ids = [
       'preset', 'preset-info', 'semiMajorAxis', 'eccentricity', 'inclinationDeg',
+      'realtimeGroup', 'realtimeSatellite', 'realtimeQuery', 'loadRealtime', 'realtimeInfo',
       'raanDeg', 'argPerigeeDeg', 'trueAnomalyDeg', 'x0', 'y0', 'z0',
       'vx0', 'vy0', 'vz0', 'speed', 'dt', 'durationMin', 'animationRate', 'forceModel',
       'alwaysVisible', 'run', 'stop', 'reset', 'applyOrbit', 'applySpeed',
       'viewGeneral', 'viewEquator', 'viewFront', 'viewRight', 'viewZoomIn', 'viewZoomOut',
       'viewFollow', 'viewEcliptic', 'viewOrbit',
-      'showEquatorPlane', 'showEclipticPlane', 'summary', 'hud', 'error', 'scene'
+      'showEquatorPlane', 'showEclipticPlane', 'showAxes', 'showRadiusVector',
+      'summary', 'hud', 'noradPanel', 'error', 'scene'
     ];
     const el = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
     const compassAxes = {
@@ -678,7 +763,7 @@
       new THREE.LineBasicMaterial({
         color: 0x38bdf8,
         transparent: true,
-        opacity: 0.72,
+        opacity: 0.46,
         depthWrite: false
       })
     );
@@ -687,15 +772,15 @@
       new THREE.LineBasicMaterial({
         color: 0xfbbf24,
         transparent: true,
-        opacity: 0.78,
+        opacity: 0.5,
         depthWrite: false
       })
     );
     eclipticGreatCircle.rotation.x = degToRad(EARTH_OBLIQUITY_DEG);
     scene.add(equatorGreatCircle, eclipticGreatCircle);
 
-    const equatorPlane = makeReferencePlane(0x38bdf8, 0.045);
-    const eclipticPlane = makeReferencePlane(0xfbbf24, 0.055);
+    const equatorPlane = makeReferencePlane(0x38bdf8, 0.02);
+    const eclipticPlane = makeReferencePlane(0xfbbf24, 0.024);
     eclipticPlane.rotation.x = degToRad(EARTH_OBLIQUITY_DEG);
     scene.add(equatorPlane, eclipticPlane);
 
@@ -723,6 +808,7 @@
     let history = [];
     let times = [];
     let speeds = [];
+    let sampleUtcTimes = [];
     let renderPositions = [];
     let renderStride = 1;
     let frameIndex = 0;
@@ -732,6 +818,9 @@
     let viewDistance = 25000;
     let syncingCamera = false;
     let followSatellite = false;
+    let activeTrajectory = { type: 'model' };
+    let lastRealtimeAutoQuery = realtimeGroupDefaults.STATIONS;
+    let realtimeRefreshTimer = null;
 
     resizeRenderer();
     initControls();
@@ -745,6 +834,10 @@
     el.reset.addEventListener('click', resetToStart);
     el.applyOrbit.addEventListener('click', applyOrbitParameters);
     el.applySpeed.addEventListener('click', applySpeed);
+    el.loadRealtime.addEventListener('click', () => loadRealtimeTrajectory());
+    el.realtimeSatellite.addEventListener('change', applyRealtimeCatalogSelection);
+    el.realtimeQuery.addEventListener('input', () => { el.realtimeSatellite.value = 'custom'; });
+    el.realtimeGroup.addEventListener('change', () => refreshRealtimeSatelliteOptions(false));
     el.preset.addEventListener('change', () => applyPreset(el.preset.value));
     el.forceModel.addEventListener('change', runSimulation);
     el.viewGeneral.addEventListener('click', () => alignView('general'));
@@ -761,8 +854,9 @@
       el[id].addEventListener('input', updateSpeedFromProjections);
     }
     el.alwaysVisible.addEventListener('change', updateDepthMode);
-    el.showEquatorPlane.addEventListener('change', updateReferencePlanesVisibility);
-    el.showEclipticPlane.addEventListener('change', updateReferencePlanesVisibility);
+    for (const id of ['showEquatorPlane', 'showEclipticPlane', 'showAxes', 'showRadiusVector']) {
+      el[id].addEventListener('change', updateLayerVisibility);
+    }
 
     function initControls() {
       for (const name of Object.keys(presets)) {
@@ -771,6 +865,7 @@
         option.textContent = name;
         el.preset.appendChild(option);
       }
+      initRealtimeCatalogLibrary();
 
       setConfigFields({
         x0: DEFAULT_RADIUS,
@@ -784,7 +879,76 @@
       });
       el.animationRate.value = 60;
       el.forceModel.value = 'twoBody';
+      syncRealtimeQueryForGroup();
       updateSpeedFromProjections();
+    }
+
+    function initRealtimeCatalogLibrary() {
+      refreshRealtimeSatelliteOptions(false);
+    }
+
+    function refreshRealtimeSatelliteOptions(preserveSelection = true) {
+      const group = el.realtimeGroup.value || 'STATIONS';
+      const previousId = el.realtimeSatellite.value;
+      const groupSatellites = realtimeCatalogSatellites.filter(
+        (satelliteData) => satelliteData.group === group
+      );
+      el.realtimeSatellite.replaceChildren();
+
+      const manualOption = document.createElement('option');
+      manualOption.value = 'custom';
+      manualOption.textContent = 'Ручной ввод';
+      el.realtimeSatellite.appendChild(manualOption);
+
+      for (const satelliteData of groupSatellites) {
+        const option = document.createElement('option');
+        option.value = satelliteData.id;
+        const catalogLabel = satelliteData.noradCatId
+          ? `${satelliteData.label} / ${satelliteData.noradCatId}`
+          : satelliteData.label;
+        option.textContent = `${catalogLabel} / ${satelliteData.group}`;
+        el.realtimeSatellite.appendChild(option);
+      }
+
+      if (preserveSelection && groupSatellites.some((satelliteData) => satelliteData.id === previousId)) {
+        el.realtimeSatellite.value = previousId;
+        applyRealtimeCatalogSelection();
+        return;
+      }
+
+      const defaultQuery = defaultRealtimeQuery(group);
+      const defaultSatellite = groupSatellites.find((satelliteData) => (
+        normalizeRealtimeQuery(satelliteData.query || satelliteData.noradCatId)
+          .includes(normalizeRealtimeQuery(defaultQuery))
+      )) || groupSatellites[0] || null;
+
+      if (defaultSatellite) {
+        el.realtimeSatellite.value = defaultSatellite.id;
+        applyRealtimeCatalogSelection();
+      } else {
+        el.realtimeSatellite.value = 'custom';
+        syncRealtimeQueryForGroup();
+      }
+    }
+
+    function selectedRealtimeCatalogSatellite() {
+      const selectedId = el.realtimeSatellite.value;
+      return realtimeCatalogSatellites.find((satelliteData) => satelliteData.id === selectedId) || null;
+    }
+
+    function applyRealtimeCatalogSelection() {
+      const satelliteData = selectedRealtimeCatalogSatellite();
+      if (!satelliteData) return;
+      if (el.realtimeGroup.value !== satelliteData.group) {
+        el.realtimeGroup.value = satelliteData.group;
+        refreshRealtimeSatelliteOptions(false);
+        return;
+      }
+      const query = satelliteData.query || satelliteData.noradCatId;
+      el.realtimeQuery.value = query;
+      lastRealtimeAutoQuery = query;
+      const noradLabel = satelliteData.noradCatId ? ` / NORAD ${satelliteData.noradCatId}` : '';
+      el.realtimeInfo.textContent = `${satelliteData.label}${noradLabel} / ${satelliteData.group}`;
     }
 
     function applyPreset(name) {
@@ -872,8 +1036,12 @@
     function runSimulation() {
       try {
         hideError();
+        clearRealtimeRefreshTimer();
         const config = readConfig();
         const result = simulateOrbit(config);
+        activeTrajectory = { type: 'model' };
+        sampleUtcTimes = [];
+        updateNoradPanel();
         history = result.history;
         times = result.times;
         speeds = history.map((state) => norm(state.slice(3, 6)));
@@ -889,6 +1057,165 @@
       }
     }
 
+    async function loadRealtimeTrajectory(options = {}) {
+      const silent = Boolean(options.silent);
+      const requestOverride = options.request || (silent ? activeTrajectory.request : null);
+      const selectedLibrarySatellite = requestOverride?.catalogSatellite || selectedRealtimeCatalogSatellite();
+      const group = requestOverride?.group || selectedLibrarySatellite?.group || el.realtimeGroup.value || 'STATIONS';
+      const query = requestOverride?.query || (selectedLibrarySatellite
+        ? selectedLibrarySatellite.query || selectedLibrarySatellite.noradCatId
+        : el.realtimeQuery.value.trim() || defaultRealtimeQuery(group));
+      const catnr = requestOverride?.catnr || (selectedLibrarySatellite ? selectedLibrarySatellite.noradCatId : '');
+      const durationMin = clamp(readNumberOrDefault('durationMin', 180), 1, 1440);
+      const stepSeconds = clamp(readNumberOrDefault('dt', 20), 1, 600);
+      const params = new URLSearchParams({
+        group,
+        query,
+        duration_min: String(durationMin),
+        step_seconds: String(stepSeconds)
+      });
+      if (catnr) {
+        params.set('catnr', catnr);
+      }
+
+      try {
+        hideError();
+        if (!silent) {
+          el.loadRealtime.disabled = true;
+          el.realtimeInfo.textContent = 'Загрузка CelesTrak GP/OMM...';
+        }
+        const response = await fetch(`/api/realtime/trajectory?${params.toString()}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(realtimeErrorMessage(payload, response.status));
+        }
+        applyRealtimeTrajectory(payload, stepSeconds, {
+          request: { group, query, catnr, catalogSatellite: selectedLibrarySatellite },
+          preserveCamera: Boolean(options.preserveCamera),
+          silent
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (silent) {
+          el.realtimeInfo.textContent = `Автообновление: ${message}`;
+        } else {
+          playing = false;
+          el.realtimeInfo.textContent = `Ошибка: ${message}`;
+          showError(message);
+        }
+      } finally {
+        if (!silent) {
+          el.loadRealtime.disabled = false;
+        }
+      }
+    }
+
+    function defaultRealtimeQuery(group) {
+      return realtimeGroupDefaults[group] || realtimeGroupDefaults.STATIONS;
+    }
+
+    function normalizeRealtimeQuery(value) {
+      return value.trim().toLowerCase();
+    }
+
+    function syncRealtimeQueryForGroup() {
+      const group = el.realtimeGroup.value || 'STATIONS';
+      const defaultQuery = defaultRealtimeQuery(group);
+      const currentQuery = el.realtimeQuery.value.trim();
+      if (
+        !currentQuery ||
+        normalizeRealtimeQuery(currentQuery) === normalizeRealtimeQuery(lastRealtimeAutoQuery)
+      ) {
+        el.realtimeQuery.value = defaultQuery;
+        lastRealtimeAutoQuery = defaultQuery;
+      }
+      el.realtimeQuery.placeholder = `например: ${defaultQuery}`;
+    }
+
+    function realtimeErrorMessage(payload, status) {
+      const baseMessage = payload.message || `HTTP ${status}`;
+      if (!Array.isArray(payload.suggestions) || payload.suggestions.length === 0) {
+        return baseMessage;
+      }
+      const names = payload.suggestions
+        .map((item) => {
+          const name = item && item.name ? String(item.name) : '';
+          const norad = item && item.norad_cat_id ? String(item.norad_cat_id) : '';
+          return name && norad ? `${name} / NORAD ${norad}` : name || norad;
+        })
+        .filter(Boolean);
+      return names.length ? `${baseMessage} В группе есть: ${names.join(', ')}.` : baseMessage;
+    }
+
+    function applyRealtimeTrajectory(payload, stepSeconds, options = {}) {
+      const samples = Array.isArray(payload.samples) ? payload.samples : [];
+      if (!samples.length) {
+        throw new Error('Источник не вернул сэмплы SGP4.');
+      }
+
+      const nextHistory = [];
+      const nextTimes = [];
+      const nextSampleUtcTimes = [];
+      const firstUtcMs = Date.parse(samples[0].sample_utc);
+      if (!Number.isFinite(firstUtcMs)) {
+        throw new Error('Некорректное UTC-время в SGP4-ответе.');
+      }
+
+      for (const sample of samples) {
+        const position = sample.visual_position_km;
+        const velocity = sample.gcrs_velocity_km_s;
+        const sampleUtcMs = Date.parse(sample.sample_utc);
+        if (
+          !Array.isArray(position) ||
+          !Array.isArray(velocity) ||
+          position.length !== 3 ||
+          velocity.length !== 3 ||
+          !Number.isFinite(sampleUtcMs)
+        ) {
+          throw new Error('Некорректный формат SGP4-сэмпла.');
+        }
+        nextHistory.push([
+          Number(position[0]),
+          Number(position[1]),
+          Number(position[2]),
+          Number(velocity[0]),
+          Number(velocity[1]),
+          Number(velocity[2])
+        ]);
+        nextSampleUtcTimes.push(sampleUtcMs);
+        nextTimes.push((sampleUtcMs - firstUtcMs) / 1000);
+      }
+
+      activeTrajectory = {
+        type: 'realtime',
+        metadata: payload.metadata || {},
+        satellite: payload.satellite || {},
+        modelProfile: payload.model_profile || {},
+        elementParameters: payload.element_parameters || {},
+        request: options.request || null,
+        catalogSatellite: options.request?.catalogSatellite || null,
+        source: payload.source || '',
+        fetchedAtUtc: payload.fetched_at_utc || null,
+        refreshedAtUtc: new Date().toISOString(),
+        samples
+      };
+      history = nextHistory;
+      times = nextTimes;
+      sampleUtcTimes = nextSampleUtcTimes;
+      speeds = history.map((state) => norm(state.slice(3, 6)));
+      frameIndex = nearestSampleIndex(Date.now());
+      simulationClock = times[frameIndex] || 0;
+      playing = true;
+      el.dt.value = formatNumber(stepSeconds);
+      el.preset.value = 'Пользовательская';
+      el['preset-info'].textContent = 'Траектория получена из GP/OMM и распространена SGP4.';
+      el.realtimeInfo.textContent = realtimeInfoText(payload, samples[frameIndex]);
+      updateSceneObjects(false, { preserveCamera: Boolean(options.preserveCamera) });
+      updateSummary(false);
+      updateHud();
+      scheduleRealtimeRefresh();
+    }
+
     function resetToStart() {
       playing = false;
       frameIndex = 0;
@@ -898,7 +1225,27 @@
       updateHud();
     }
 
-    function updateSceneObjects(stoppedByCollision) {
+    function scheduleRealtimeRefresh() {
+      clearRealtimeRefreshTimer();
+      realtimeRefreshTimer = window.setInterval(() => {
+        if (activeTrajectory.type === 'realtime') {
+          loadRealtimeTrajectory({
+            silent: true,
+            preserveCamera: true,
+            request: activeTrajectory.request
+          });
+        }
+      }, REALTIME_REFRESH_MS);
+    }
+
+    function clearRealtimeRefreshTimer() {
+      if (realtimeRefreshTimer !== null) {
+        window.clearInterval(realtimeRefreshTimer);
+        realtimeRefreshTimer = null;
+      }
+    }
+
+    function updateSceneObjects(stoppedByCollision, options = {}) {
       renderStride = Math.max(1, Math.ceil(history.length / MAX_RENDER_POINTS));
       renderPositions = makeRenderPositions(history, renderStride);
 
@@ -907,10 +1254,12 @@
       setLinePoints(trailLine, renderPositions);
       updateDepthMode();
       updateReferencePlanes(renderPositions);
-      updateReferencePlanesVisibility();
+      updateLayerVisibility();
       updateTrail();
       updateSatellite();
-      fitCameraToTrajectory(renderPositions);
+      if (!options.preserveCamera) {
+        fitCameraToTrajectory(renderPositions);
+      }
       if (stoppedByCollision) {
         showError('Расчет остановлен: пересечение поверхности Земли.');
       }
@@ -918,10 +1267,11 @@
 
     function updateDepthMode() {
       const alwaysVisible = el.alwaysVisible.checked;
+      orbitLine.visible = !alwaysVisible;
       orbitLine.material.depthTest = false;
       orbitLine.material.depthWrite = false;
       orbitLine.material.transparent = true;
-      orbitLine.material.opacity = alwaysVisible ? 0.18 : 0.28;
+      orbitLine.material.opacity = 0.12;
       orbitLine.renderOrder = 4;
 
       for (const line of [orbitLineVisible, trailLine, positionVectorLine]) {
@@ -930,7 +1280,7 @@
         line.material.transparent = true;
         line.renderOrder = alwaysVisible ? 8 : 5;
       }
-      orbitLineVisible.material.opacity = alwaysVisible ? 0.94 : 0.86;
+      orbitLineVisible.material.opacity = alwaysVisible ? 0.74 : 0.62;
       trailLine.material.opacity = alwaysVisible ? 1.0 : 0.95;
       positionVectorLine.material.opacity = alwaysVisible ? 0.68 : 0.48;
       satellite.material.depthTest = !alwaysVisible;
@@ -939,21 +1289,24 @@
 
     function updateReferencePlanes(points) {
       const maxRadius = points.reduce((maxValue, point) => Math.max(maxValue, point.length()), R_EARTH);
-      const planeRadius = Math.max(R_EARTH * 1.42, maxRadius * 1.04);
+      const planeRadius = Math.max(R_EARTH * 1.28, Math.min(maxRadius * 0.62, R_EARTH * 2.2));
       equatorPlane.scale.setScalar(planeRadius);
       eclipticPlane.scale.setScalar(planeRadius);
     }
 
-    function updateReferencePlanesVisibility() {
+    function updateLayerVisibility() {
       equatorPlane.visible = el.showEquatorPlane.checked;
       eclipticPlane.visible = el.showEclipticPlane.checked;
       equatorGreatCircle.visible = el.showEquatorPlane.checked;
       eclipticGreatCircle.visible = el.showEclipticPlane.checked;
+      earthAxes.group.visible = el.showAxes.checked;
+      positionVectorLine.visible = el.showRadiusVector.checked;
     }
 
     function updateTrail() {
       if (!history.length || !renderPositions.length) return;
-      trailLine.geometry.setDrawRange(0, trailRenderCount());
+      const range = trailDrawRange();
+      trailLine.geometry.setDrawRange(range.start, range.count);
     }
 
     function updateSatellite() {
@@ -967,12 +1320,53 @@
     }
 
     function updateHud() {
-      if (!history.length) return;
+      if (!history.length) {
+        updateNoradPanel();
+        return;
+      }
       const altitude = norm(history[frameIndex].slice(0, 3)) - R_EARTH;
-      el.hud.innerHTML = `t = ${(times[frameIndex] / 60).toFixed(1)} мин<br>h = ${altitude.toFixed(1)} км<br>V = ${speeds[frameIndex].toFixed(3)} км/с`;
+      const timeLabel = activeTrajectory.type === 'realtime' && sampleUtcTimes[frameIndex]
+        ? `UTC = ${formatUtc(sampleUtcTimes[frameIndex])}`
+        : `t = ${(times[frameIndex] / 60).toFixed(1)} мин`;
+      el.hud.innerHTML = `${timeLabel}<br>h = ${altitude.toFixed(1)} км<br>V = ${speeds[frameIndex].toFixed(3)} км/с`;
+      updateNoradPanel();
+    }
+
+    function updateNoradPanel() {
+      if (activeTrajectory.type !== 'realtime') {
+        el.noradPanel.textContent = '';
+        el.noradPanel.style.display = 'none';
+        return;
+      }
+
+      const parameters = activeTrajectory.elementParameters || {};
+      const sample = activeTrajectory.samples?.[frameIndex] || activeTrajectory.samples?.[0] || {};
+      const satelliteData = activeTrajectory.satellite || {};
+      const lines = [
+        'NORAD / OMM',
+        `${satelliteData.name || parameters.object_name || 'Спутник'} / ${parameters.norad_cat_id || satelliteData.norad_cat_id || '-'}`,
+        `COSPAR: ${parameters.object_id || '-'}`,
+        `Epoch: ${formatUtc(parameters.epoch_utc || satelliteData.epoch_utc)}`,
+        `Frame: ${parameters.ref_frame || '-'}  Time: ${parameters.time_system || '-'}`,
+        `n: ${formatMetric(parameters.mean_motion_rev_per_day, 8)} rev/day`,
+        `T: ${formatMetric(parameters.period_min, 2)} мин`,
+        `e: ${formatMetric(parameters.eccentricity, 7)}`,
+        `i/Omega: ${formatMetric(parameters.inclination_deg, 3)} / ${formatMetric(parameters.raan_deg, 3)} deg`,
+        `omega/M: ${formatMetric(parameters.arg_perigee_deg, 3)} / ${formatMetric(parameters.mean_anomaly_deg, 3)} deg`,
+        `BSTAR: ${formatMetric(parameters.bstar, 3)}`,
+        `rev: ${parameters.rev_at_epoch || '-'}  set: ${parameters.element_set_no || '-'}`,
+        `lat/lon: ${formatMetric(sample.latitude_deg, 2)} / ${formatMetric(sample.longitude_deg, 2)} deg`
+      ];
+      el.noradPanel.textContent = lines.join('\n');
+      el.noradPanel.style.display = 'block';
     }
 
     function updateSummary(stoppedByCollision) {
+      if (activeTrajectory.type === 'realtime') {
+        updateRealtimeSummary();
+        return;
+      }
+
       const state = history[0];
       const position = state.slice(0, 3);
       const velocity = state.slice(3, 6);
@@ -1031,10 +1425,9 @@
       updateViewCompass();
 
       if (playing && history.length > 1) {
-        const animationRate = Math.max(0.1, readNumberOrDefault('animationRate', 60));
-        simulationClock += (deltaMs / 1000) * animationRate;
-        const dt = Math.max(1e-9, readNumberOrDefault('dt', 1));
-        const nextIndex = Math.floor(simulationClock / dt) % history.length;
+        const nextIndex = activeTrajectory.type === 'realtime' && sampleUtcTimes.length
+          ? nearestSampleIndex(Date.now())
+          : nextModelFrameIndex(deltaMs);
         if (nextIndex !== frameIndex) {
           frameIndex = nextIndex;
           updateTrail();
@@ -1044,6 +1437,67 @@
       }
 
       renderer.render(scene, camera);
+    }
+
+    function nextModelFrameIndex(deltaMs) {
+      const animationRate = Math.max(0.1, readNumberOrDefault('animationRate', 60));
+      simulationClock += (deltaMs / 1000) * animationRate;
+      const dt = Math.max(1e-9, readNumberOrDefault('dt', 1));
+      return Math.floor(simulationClock / dt) % history.length;
+    }
+
+    function nearestSampleIndex(targetUtcMs) {
+      if (!sampleUtcTimes.length) return 0;
+      if (targetUtcMs <= sampleUtcTimes[0]) return 0;
+      const lastIndex = sampleUtcTimes.length - 1;
+      if (targetUtcMs >= sampleUtcTimes[lastIndex]) return lastIndex;
+
+      let low = 0;
+      let high = lastIndex;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        if (sampleUtcTimes[mid] < targetUtcMs) {
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+
+      const before = Math.max(0, low - 1);
+      const after = Math.min(lastIndex, low);
+      return targetUtcMs - sampleUtcTimes[before] <= sampleUtcTimes[after] - targetUtcMs
+        ? before
+        : after;
+    }
+
+    function updateRealtimeSummary() {
+      const metadata = activeTrajectory.metadata || {};
+      const modelProfile = activeTrajectory.modelProfile || {};
+      const satelliteData = activeTrajectory.satellite || {};
+      const catalogSatellite = activeTrajectory.catalogSatellite || {};
+      const parameters = activeTrajectory.elementParameters || {};
+      const sample = activeTrajectory.samples?.[frameIndex] || activeTrajectory.samples?.[0] || {};
+      const stale = sample.epoch_is_stale ? ' (устарела)' : '';
+      const lines = [
+        `Frame: ${metadata.frame || 'SGP4/Skyfield GCRS + WGS84 visual position.'}`,
+        `Time scale: ${metadata.time_scale || 'UTC wall-clock time.'}`,
+        `Units: ${metadata.units || 'km, km/s, degrees.'}`,
+        `Force model: ${metadata.force_model || 'SGP4 general perturbations.'}`,
+        `Input: ${modelProfile.input_frame || parameters.ref_frame || 'TEME'} / ${modelProfile.input_time_system || parameters.time_system || 'UTC'} / ${modelProfile.mean_element_theory || parameters.mean_element_theory || 'SGP4'}`,
+        `Earth home: ${EARTH_HOME_POINT}`,
+        '',
+        `Спутник: ${satelliteData.name || 'не указан'} / NORAD ${satelliteData.norad_cat_id || '-'}`,
+        `Каталог: ${catalogSatellite.label || 'ручной поиск'}`,
+        `Эпоха OMM: ${formatUtc(satelliteData.epoch_utc)}`,
+        `Возраст эпохи: ${Number(sample.epoch_age_days || 0).toFixed(2)} суток${stale}`,
+        `OMM n/e/i: ${formatMetric(parameters.mean_motion_rev_per_day, 8)} rev/day, ${formatMetric(parameters.eccentricity, 7)}, ${formatMetric(parameters.inclination_deg, 3)} deg`,
+        `OMM Omega/omega/M: ${formatMetric(parameters.raan_deg, 3)} / ${formatMetric(parameters.arg_perigee_deg, 3)} / ${formatMetric(parameters.mean_anomaly_deg, 3)} deg`,
+        `OMM BSTAR: ${formatMetric(parameters.bstar, 3)}`,
+        `Обновлено: ${formatUtc(activeTrajectory.refreshedAtUtc)}`,
+        `Сэмплы: ${history.length}`,
+        `Источник: ${activeTrajectory.source || 'CelesTrak GP/OMM'}`
+      ];
+      el.summary.textContent = lines.join('\n');
     }
 
     function readConfig() {
@@ -1632,11 +2086,19 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
       return positions;
     }
 
-    function trailRenderCount() {
+    function trailDrawRange() {
+      const current = currentRenderPointIndex();
+      const dt = Math.max(1e-9, readNumberOrDefault('dt', 1));
+      const trailSamples = Math.max(1, Math.ceil(TRAIL_WINDOW_MIN * 60 / dt / renderStride));
+      const start = Math.max(0, current - trailSamples);
+      return { start, count: Math.max(1, current - start + 1) };
+    }
+
+    function currentRenderPointIndex() {
       if (frameIndex >= history.length - 1) {
-        return renderPositions.length;
+        return Math.max(0, renderPositions.length - 1);
       }
-      return Math.min(renderPositions.length, Math.max(1, Math.floor(frameIndex / renderStride) + 1));
+      return Math.min(renderPositions.length - 1, Math.max(0, Math.floor(frameIndex / renderStride)));
     }
 
     function circleGeometry(radius, segments, plane) {
@@ -1860,6 +2322,38 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
     function hideError() {
       el.error.textContent = '';
       el.error.style.display = 'none';
+    }
+
+    function realtimeInfoText(payload, sample) {
+      const satelliteData = payload.satellite || {};
+      const lines = [
+        `${satelliteData.name || 'Спутник'} / NORAD ${satelliteData.norad_cat_id || '-'}`,
+        `UTC: ${formatUtc(sample?.sample_utc)}`,
+        `Эпоха OMM: ${formatUtc(satelliteData.epoch_utc)}`,
+        `Авто: каждые ${Math.round(REALTIME_REFRESH_MS / 60000)} мин`
+      ];
+      if (sample?.epoch_is_stale) {
+        lines.push('Эпоха старше рекомендуемого окна.');
+      }
+      return lines.join('\n');
+    }
+
+    function formatUtc(value) {
+      if (value === undefined || value === null || value === '') return '-';
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return String(value);
+      return date.toISOString().replace('.000Z', 'Z');
+    }
+
+    function formatMetric(value, digits = 3) {
+      if (value === undefined || value === null || value === '') return '-';
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return '-';
+      const absolute = Math.abs(numeric);
+      if (absolute > 0 && absolute < 1e-3) {
+        return numeric.toExponential(Math.min(3, digits));
+      }
+      return numeric.toFixed(digits).replace(/\.?0+$/, '');
     }
 
     function formatNumber(value) {

@@ -5,6 +5,7 @@ description = "Local WebGL satellite orbit visualizer."
 requires-python = ">=3.9"
 dependencies = [
   "numpy>=2.0",
+  "skyfield>=1.49",
 ]
 
 [tool.pytest.ini_options]

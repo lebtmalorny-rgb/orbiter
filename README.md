@@ -1,57 +1,189 @@
 # Orbiter
 
-Interactive local satellite orbit visualizer.
+Orbiter - локальное WebGL-приложение для 3D-визуализации движения спутника
+вокруг Земли. Приложение запускается на компьютере пользователя, обслуживает
+`orbiter_web.html` через локальный HTTP-сервер и использует локальные assets
+Three.js, OrbitControls и текстуру Земли без обязательного доступа к сети во
+время работы.
 
-The project goal is a locally launched app for exploring satellite motion around Earth
-with convenient 3D navigation. It currently propagates one configured satellite, and the
-code should stay ready for future named satellites, imported trajectories, and an explicit
-real-time mode synchronized to wall-clock time.
+Сейчас приложение рассчитывает и отображает одну выбранную орбиту либо загружает
+актуальные GP/OMM-элементы CelesTrak и строит SGP4-траекторию спутника вокруг
+текущего UTC. Архитектура проекта должна оставаться готовой к следующим шагам:
+нескольким именованным спутникам, импортируемым траекториям и расширенному
+каталогу объектов.
 
-## Run
+## Возможности
+
+- 3D-глобус Земли с сеткой, плоскостями экватора и эклиптики.
+- Готовые орбитальные пресеты: МКС, низкая круговая, полярная, Метеор-М,
+  Канопус-В, GPS, геостационарная и Молния.
+- Ручной ввод классических орбитальных элементов или начального состояния
+  `X/Y/Z`, `Vx/Vy/Vz`.
+- Численное распространение траектории методом RK4 прямо в браузере.
+- Выбор модели сил: двухтельная точечная Земля или двухтельная модель + J2.
+- Загрузка надежных GP/OMM-элементов CelesTrak через локальный API и
+  распространение через Skyfield/SGP4.
+- UTC-синхронизация SGP4-режима по ближайшему сэмплу к текущему времени.
+- Удобная навигация камеры, масштабирование, следование за спутником и домашний
+  вид над Москвой.
+
+## Модель
+
+Локальная расчетная модель:
+
+- Frame: геоцентрическая инерциальная декартова система, оси `X/Y/Z`.
+- Time scale: относительное модельное время от `t = 0`; UTC, TT и TDB сейчас не
+  используются.
+- Units: положение в км, скорость в км/с, шаг времени в секундах, длительность в
+  минутах, орбитальные углы в градусах.
+- Force model: двухтельная точечная Земля или двухтельная модель + Earth J2.
+- Earth home view: над Москвой, широта `55.7558 deg N`, долгота
+  `37.6173 deg E`. В текущей модели это статичная сферическая визуальная
+  привязка, не решение с вращением Земли или UTC ground track.
+
+Реальный SGP4-режим:
+
+- Source: CelesTrak GP/OMM JSON, по умолчанию группа `STATIONS`.
+- Frame: распространение выполняет Skyfield SGP4; API возвращает GCRS-положение
+  и WGS84-derived визуальную позицию для отображения над Землей.
+- Time scale: UTC wall-clock time.
+- Units: положение в км, скорость в км/с, широта/долгота в градусах.
+- Force model: SGP4 general perturbations из GP/OMM mean elements.
+- Epoch check: эпоха элемента помечается устаревшей, если она дальше 14 суток от
+  запрошенного UTC.
+
+В текущей версии нет атмосферы, тяги, третьих тел в пользовательской RK4-модели,
+а также полноценной Earth orientation/ITRF ground-track модели. SGP4-слой
+использует надежный стандартный источник элементов, но качество прогноза все
+равно зависит от свежести эпохи.
+
+## Структура
+
+- `orbiter_web.html` - основной браузерный интерфейс и Three.js-визуализация.
+- `third.py` - локальный HTTP-сервер для запуска приложения.
+- `orbiter/dynamics.py` - Python-референс динамики, единиц и координатных
+  преобразований.
+- `orbiter/realtime.py` - загрузка CelesTrak GP/OMM, кэш, выбор спутника и
+  Skyfield/SGP4-распространение.
+- `tests/test_dynamics.py` - pytest-проверки динамики, единиц и сводки модели.
+- `tests/test_realtime.py` - pytest-проверки URL CelesTrak, кэша, парсинга OMM и
+  SGP4-сэмплов.
+- `assets/` - локальные JS-модули Three.js/OrbitControls и текстура Земли.
+
+## Требования
+
+- Python `3.9+`.
+- Современный браузер с WebGL.
+- Windows PowerShell для команд ниже. На macOS/Linux команды аналогичны, но путь
+  к Python внутри virtualenv будет `venv/bin/python`.
+
+## Установка
+
+Из корня проекта:
+
+```powershell
+py -3 -m venv venv
+venv\Scripts\python.exe -m pip install --upgrade pip
+venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Для разработки, запуска ruff и pytest установите dev-зависимости:
+
+```powershell
+venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
+
+Runtime-зависимости Python: `numpy` и `skyfield` (`skyfield` устанавливает
+необходимые пакеты для SGP4). Браузерная часть использует локальные файлы из
+`assets/`, поэтому `npm install` не требуется.
+
+## Запуск
+
+Обычный запуск с автоматическим открытием браузера:
 
 ```powershell
 venv\Scripts\python.exe third.py
 ```
 
-The browser app is `orbiter_web.html`; `third.py` serves it locally so ES modules and
-assets load correctly.
+Сервер привязывается к `127.0.0.1`, выбирает свободный порт начиная с `8765` и
+печатает URL вида:
 
-The server binds to `127.0.0.1` and chooses a free port in the local range starting at
-`8765`.
+```text
+http://127.0.0.1:8765/orbiter_web.html
+```
 
-For automated checks or manual browser opening:
+Запуск без автоматического открытия браузера и с фиксированным портом:
 
 ```powershell
 venv\Scripts\python.exe third.py --no-browser --port 8770
 ```
 
-## Model
+Дополнительно можно указать host:
 
-- Frame: geocentric inertial Cartesian frame, axes `X/Y/Z`.
-- Time scale: relative simulation time from `t = 0`; UTC, TT, and TDB are not used.
-- Units: position in km, velocity in km/s, time step in seconds, duration in minutes,
-  orbital angles in degrees.
-- Force model: selectable two-body point-mass Earth or two-body + Earth J2. There is
-  no atmosphere, thrust, third bodies, Earth rotation, TLE, or SGP4.
-- Earth home view: above Moscow, latitude `55.7558 deg N`, longitude `37.6173 deg E`.
-  In the current model this is a static spherical Earth visual reference, not an
-  Earth-rotation or UTC-ground-track solution.
+```powershell
+venv\Scripts\python.exe third.py --host 127.0.0.1 --port 8770
+```
 
-The Python reference implementation lives in `orbiter/dynamics.py`. The browser
-visualizer mirrors the same equations in JavaScript for client-side interaction.
+Для остановки сервера нажмите `Ctrl+C` в окне, где он запущен.
 
-## Roadmap Notes
+## Реальное время
 
-- Multiple satellites: add named state/trajectory records instead of hard-coding one
-  active satellite.
-- Imported trajectories: keep frame, time scale, units, and force model metadata beside
-  every trajectory.
-- Real-time display: add a separate wall-clock synchronized mode only after introducing
-  UTC-aware propagation, TLE epoch validation, and SGP4/Skyfield for TLE objects.
+В интерфейсе используйте блок `Реальное время`: выберите группу CelesTrak,
+затем аппарат из отфильтрованного списка этой группы или задайте имя/NORAD ID
+вручную, и нажмите `Загрузить SGP4/UTC`. Сервер скачает GP/OMM JSON, закэширует его в
+`.orbiter_cache/` на 2 часа и вернет траекторию вокруг текущего UTC. После
+включения real-time режима окно траектории автоматически обновляется каждые
+5 минут без сброса камеры. Для работы с актуальными элементами нужен доступ к
+интернету при первом запросе или после истечения TTL кэша.
 
-## Checks
+Запрос к CelesTrak всегда явно указывает `FORMAT=JSON`, потому что GP endpoint
+может иметь другой формат по умолчанию. Для совместимости с OMM/SGP4 сервер
+нормализует ожидаемые CelesTrak defaults: `CENTER_NAME=EARTH`,
+`REF_FRAME=TEME`, `TIME_SYSTEM=UTC`, `MEAN_ELEMENT_THEORY=SGP4`. Если сеть
+недоступна, но в `.orbiter_cache/` есть последний валидный набор, сервер
+использует его даже после истечения TTL и не уходит в retry loop.
+
+В встроенной библиотеке аппараты привязаны к CelesTrak-группам: `Метеор-М` и
+`NOAA` находятся в `WEATHER`, `Ресурс-П`, `Канопус-В` и `Кондор-ФКА` - в
+`RESOURCE`, МКС - в `STATIONS`, Hubble - в `VISUAL`, а навигационный поиск
+GPS - в `GPS-OPS`. Для конкретных аппаратов запрос идет по `CATNR`, чтобы не
+зависеть от широкой группы `ACTIVE`.
+
+Локальные API:
+
+```text
+GET /api/realtime/catalog?group=STATIONS
+GET /api/realtime/trajectory?group=STATIONS&query=ISS&duration_min=180&step_seconds=20
+GET /api/realtime/trajectory?catnr=59371&query=59371&duration_min=180&step_seconds=20
+```
+
+`query` может быть частью имени спутника или NORAD ID. В ответе
+`/api/realtime/trajectory` всегда есть `metadata` и `model_profile` с frame,
+time scale, units, force model, input frame/time system/theory и epoch policy, а
+также `element_parameters` с OMM/NORAD-значениями: COSPAR
+`OBJECT_ID`, эпоха, mean motion, eccentricity, inclination, RAAN, argument of
+perigee, mean anomaly, BSTAR, revolution number и element set number. Эти
+параметры показываются поверх сцены Земли в карточке `NORAD / OMM`.
+
+## Проверки
+
+Перед завершением изменений запускайте:
 
 ```powershell
 venv\Scripts\python.exe -m ruff check .
 venv\Scripts\python.exe -m pytest
 ```
+
+Для браузерных изменений дополнительно запустите локальный сервер и проверьте,
+что страница открывается, WebGL-сцена не пустая, консоль браузера без ошибок, а
+интерфейс корректен на desktop и mobile viewport.
+
+## Roadmap
+
+- Несколько спутников: перейти от одного активного состояния к именованным
+  объектам с независимыми траекториями.
+- Импорт траекторий: хранить рядом с каждой траекторией frame, time scale, units
+  и force model.
+- Каталог в UI: показывать найденные спутники произвольной группы CelesTrak, а
+  не только ручной поиск и curated-библиотеку.
+- Реальное время: добавить более строгую модель Earth orientation/ground track.

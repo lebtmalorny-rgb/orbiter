@@ -8,6 +8,7 @@ __pycache__/
 .ruff_cache/
 .serena/
 .playwright-mcp/
+.orbiter_cache/
 *.log
 *.out
 *.png
