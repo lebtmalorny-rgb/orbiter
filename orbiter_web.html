@@ -1,0 +1,1405 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3D визуализация движения спутника</title>
+  <style>
+    :root {
+      --panel: #f5f7fb;
+      --panel-border: #d5dbe8;
+      --text: #172033;
+      --muted: #596579;
+      --accent: #d62828;
+      --accent-dark: #8f1111;
+      --blue: #1d4ed8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #0b1020;
+    }
+
+    #app {
+      display: grid;
+      grid-template-columns: minmax(300px, 360px) 1fr;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #controls {
+      overflow-y: auto;
+      padding: 14px;
+      background: var(--panel);
+      border-right: 1px solid var(--panel-border);
+    }
+
+    #scene {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    fieldset {
+      margin: 0 0 12px;
+      padding: 10px;
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    legend {
+      padding: 0 5px;
+      color: #26334a;
+      font-weight: 650;
+      font-size: 14px;
+    }
+
+    label {
+      display: grid;
+      grid-template-columns: minmax(96px, 1fr) minmax(100px, 128px);
+      gap: 8px;
+      align-items: center;
+      margin: 7px 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input,
+    select,
+    button {
+      min-height: 30px;
+      border-radius: 6px;
+      font: inherit;
+    }
+
+    input,
+    select {
+      width: 100%;
+      border: 1px solid #c4ccda;
+      padding: 4px 7px;
+      color: var(--text);
+      background: #ffffff;
+    }
+
+    button {
+      border: 0;
+      padding: 6px 10px;
+      color: #ffffff;
+      background: var(--blue);
+      cursor: pointer;
+    }
+
+    button:hover {
+      filter: brightness(1.08);
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .wide {
+      width: 100%;
+      margin-top: 6px;
+    }
+
+    .danger {
+      background: var(--accent);
+    }
+
+    .secondary {
+      background: #475569;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 8px;
+    }
+
+    .grid-2 label {
+      grid-template-columns: minmax(58px, 1fr) minmax(72px, 100px);
+    }
+
+    .note,
+    #summary {
+      white-space: pre-line;
+      color: #42506a;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    #hud {
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      min-width: 170px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      color: #f8fafc;
+      background: rgba(10, 16, 32, 0.72);
+      font-size: 15px;
+      line-height: 1.35;
+      pointer-events: none;
+      backdrop-filter: blur(6px);
+    }
+
+    #error {
+      position: absolute;
+      right: 16px;
+      top: 188px;
+      max-width: 360px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #ffffff;
+      background: rgba(190, 18, 60, 0.92);
+      font-size: 14px;
+      display: none;
+    }
+
+    #view-panel {
+      position: absolute;
+      right: 16px;
+      top: 16px;
+      display: grid;
+      grid-template-columns: 34px 96px;
+      gap: 8px;
+      align-items: start;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      background: rgba(10, 16, 32, 0.58);
+      backdrop-filter: blur(8px);
+      z-index: 5;
+    }
+
+    #view-panel button {
+      min-height: 30px;
+      border: 1px solid rgba(148, 163, 184, 0.48);
+      border-radius: 6px;
+      color: #e5eefb;
+      background: rgba(30, 41, 59, 0.82);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    #view-panel button:hover,
+    #view-panel button.active {
+      border-color: rgba(56, 189, 248, 0.9);
+      background: rgba(14, 116, 144, 0.86);
+      filter: none;
+    }
+
+    .view-home {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+    }
+
+    .view-stack {
+      display: grid;
+      gap: 8px;
+    }
+
+    .view-cube {
+      position: relative;
+      width: 96px;
+      height: 96px;
+      perspective: 420px;
+    }
+
+    .cube-core {
+      position: absolute;
+      left: 25px;
+      top: 25px;
+      width: 46px;
+      height: 46px;
+      transform-style: preserve-3d;
+      transform: rotateX(-28deg) rotateY(38deg);
+    }
+
+    .cube-face {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      padding: 0;
+      backface-visibility: hidden;
+    }
+
+    .cube-top {
+      transform: rotateX(90deg) translateZ(23px);
+    }
+
+    .cube-front {
+      transform: translateZ(23px);
+    }
+
+    .cube-right {
+      transform: rotateY(90deg) translateZ(23px);
+    }
+
+    .view-extra,
+    .plane-switches {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .plane-switch {
+      position: relative;
+      display: block;
+      margin: 0;
+    }
+
+    .plane-switch input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .plane-switch span {
+      display: grid;
+      place-items: center;
+      height: 30px;
+      border: 1px solid rgba(148, 163, 184, 0.48);
+      border-radius: 6px;
+      color: #cbd5e1;
+      background: rgba(30, 41, 59, 0.72);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .plane-switch input:checked + span {
+      border-color: rgba(251, 191, 36, 0.9);
+      color: #f8fafc;
+      background: rgba(120, 83, 20, 0.82);
+    }
+
+    @media (max-width: 860px) {
+      #app {
+        grid-template-columns: 1fr;
+        grid-template-rows: 42vh 58vh;
+      }
+
+      #controls {
+        order: 2;
+        border-right: 0;
+        border-top: 1px solid var(--panel-border);
+      }
+
+      #scene {
+        order: 1;
+      }
+
+      #view-panel {
+        right: 10px;
+        top: 10px;
+        transform: scale(0.86);
+        transform-origin: top right;
+      }
+
+      #error {
+        top: 152px;
+        right: 10px;
+        max-width: calc(100vw - 20px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="controls">
+      <h1>3D движение спутника</h1>
+
+      <fieldset>
+        <legend>Готовая орбита</legend>
+        <select id="preset"></select>
+        <div id="preset-info" class="note"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Параметры орбиты</legend>
+        <div class="grid-2">
+          <label>a, км <input id="semiMajorAxis" type="number" step="1"></label>
+          <label>e <input id="eccentricity" type="number" step="0.0001" min="0" max="0.99"></label>
+          <label>i, град <input id="inclinationDeg" type="number" step="0.1"></label>
+          <label>Omega <input id="raanDeg" type="number" step="0.1"></label>
+          <label>omega <input id="argPerigeeDeg" type="number" step="0.1"></label>
+          <label>nu <input id="trueAnomalyDeg" type="number" step="0.1"></label>
+        </div>
+        <button class="wide" id="applyOrbit">Применить параметры орбиты</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>Координаты, км</legend>
+        <label>X0 <input id="x0" type="number" step="0.1"></label>
+        <label>Y0 <input id="y0" type="number" step="0.1"></label>
+        <label>Z0 <input id="z0" type="number" step="0.1"></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Скорости, км/с</legend>
+        <label>Vx0 <input id="vx0" type="number" step="0.001"></label>
+        <label>Vy0 <input id="vy0" type="number" step="0.001"></label>
+        <label>Vz0 <input id="vz0" type="number" step="0.001"></label>
+        <label>V <input id="speed" type="number" step="0.001"></label>
+        <button class="wide" id="applySpeed">Применить V</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>Расчет</legend>
+        <label>Шаг dt, с <input id="dt" type="number" step="0.5" min="0.1"></label>
+        <label>Длительность, мин <input id="durationMin" type="number" step="10" min="1"></label>
+        <label>Скорость анимации <input id="animationRate" type="number" step="0.5" min="0.1"></label>
+        <label>Модель <select id="forceModel">
+          <option value="twoBody">2 тела</option>
+          <option value="j2">J2</option>
+        </select></label>
+        <label>Поверх Земли <input id="alwaysVisible" type="checkbox" checked></label>
+      </fieldset>
+
+      <div class="button-row">
+        <button id="run">Построить</button>
+        <button class="secondary" id="stop">Стоп</button>
+        <button class="danger" id="reset">Сброс</button>
+      </div>
+
+      <fieldset>
+        <legend>Сводка</legend>
+        <div id="summary"></div>
+      </fieldset>
+    </aside>
+
+    <main id="scene">
+      <div id="hud">t = 0.0 мин<br>V = 0.000 км/с</div>
+      <nav id="view-panel" aria-label="Управление видом">
+        <button id="viewGeneral" class="view-home active" type="button" title="Общий вид">Home</button>
+        <div class="view-stack">
+          <div class="view-cube" aria-label="ViewCube">
+            <div class="cube-core">
+              <button id="viewEquator" class="cube-face cube-top" type="button" title="Вид сверху вдоль +Z">Top</button>
+              <button id="viewFront" class="cube-face cube-front" type="button" title="Фронтальный вид">Front</button>
+              <button id="viewRight" class="cube-face cube-right" type="button" title="Вид справа">Right</button>
+            </div>
+          </div>
+          <div class="view-extra">
+            <button id="viewEcliptic" type="button" title="Вид вдоль нормали эклиптики">ECL</button>
+            <button id="viewOrbit" type="button" title="Вид вдоль нормали орбиты">ORB</button>
+          </div>
+          <div class="plane-switches">
+            <label class="plane-switch" title="Показать плоскость экватора">
+              <input id="showEquatorPlane" type="checkbox" checked>
+              <span>EQ</span>
+            </label>
+            <label class="plane-switch" title="Показать плоскость эклиптики">
+              <input id="showEclipticPlane" type="checkbox" checked>
+              <span>ECL</span>
+            </label>
+          </div>
+        </div>
+      </nav>
+      <div id="error"></div>
+    </main>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./assets/three.module.min.js",
+        "three/addons/controls/OrbitControls.js": "./assets/OrbitControls.js"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const R_EARTH = 6371.0;
+    const MU = 398600.4418;
+    const J2 = 1.08262668e-3;
+    const J2_REFERENCE_RADIUS = 6378.1363;
+    const DEFAULT_RADIUS = 7000.0;
+    const DEFAULT_SPEED = Math.sqrt(MU / DEFAULT_RADIUS);
+    const MAX_STEPS = 200000;
+    const MAX_RENDER_POINTS = 12000;
+    const EARTH_OBLIQUITY_DEG = 23.439281;
+    const REFERENCE_FRAME = 'Геоцентрическая инерциальная Cartesian-система, оси X/Y/Z.';
+    const TIME_SCALE = 'Относительное модельное время от t=0; UTC/TT/TDB не используются.';
+    const UNITS = 'Положение: км; скорость: км/с; время: с и мин; углы: градусы.';
+    const forceModelLabels = {
+      twoBody: 'Двухтельная модель: точечная Земля, без J2, атмосферы и третьих тел.',
+      j2: 'Двухтельная модель + J2 Земли, без атмосферы, тяги и третьих тел.'
+    };
+
+    const presets = {
+      'Пользовательская': null,
+      'МКС': {
+        semiMajorAxis: R_EARTH + 420.0,
+        eccentricity: 0.0007,
+        inclinationDeg: 51.64,
+        raanDeg: 25.0,
+        argPerigeeDeg: 0.0,
+        trueAnomalyDeg: 0.0,
+        dt: 2.0,
+        durationMin: 180.0,
+        description: 'Примерная низкая орбита Международной космической станции.'
+      },
+      'Низкая круговая орбита': {
+        semiMajorAxis: R_EARTH + 500.0,
+        eccentricity: 0.0,
+        inclinationDeg: 28.5,
+        raanDeg: 0.0,
+        argPerigeeDeg: 0.0,
+        trueAnomalyDeg: 0.0,
+        dt: 2.0,
+        durationMin: 180.0,
+        description: 'Типовая круговая НОО для демонстрации быстрого витка.'
+      },
+      'Полярная орбита': {
+        semiMajorAxis: R_EARTH + 800.0,
+        eccentricity: 0.001,
+        inclinationDeg: 98.6,
+        raanDeg: 35.0,
+        argPerigeeDeg: 0.0,
+        trueAnomalyDeg: 0.0,
+        dt: 3.0,
+        durationMin: 220.0,
+        description: 'Солнечно-синхронная орбита для спутников наблюдения Земли.'
+      },
+      'Метеор-М': {
+        semiMajorAxis: 7202.0,
+        eccentricity: 0.00055,
+        inclinationDeg: 98.8,
+        raanDeg: 45.0,
+        argPerigeeDeg: 0.0,
+        trueAnomalyDeg: 0.0,
+        dt: 3.0,
+        durationMin: 220.0,
+        description: 'Примерная солнечно-синхронная орбита метеорологического спутника.'
+      },
+      'Канопус-В': {
+        semiMajorAxis: R_EARTH + 510.0,
+        eccentricity: 0.001,
+        inclinationDeg: 97.4,
+        raanDeg: 20.0,
+        argPerigeeDeg: 0.0,
+        trueAnomalyDeg: 0.0,
+        dt: 2.0,
+        durationMin: 190.0,
+        description: 'Примерная солнечно-синхронная орбита спутника дистанционного зондирования.'
+      },
+      'GPS': {
+        semiMajorAxis: 26560.0,
+        eccentricity: 0.01,
+        inclinationDeg: 55.0,
+        raanDeg: 10.0,
+        argPerigeeDeg: 0.0,
+        trueAnomalyDeg: 0.0,
+        dt: 20.0,
+        durationMin: 760.0,
+        description: 'Средневысотная навигационная орбита.'
+      },
+      'Геостационарная': {
+        semiMajorAxis: 42164.0,
+        eccentricity: 0.0,
+        inclinationDeg: 0.0,
+        raanDeg: 0.0,
+        argPerigeeDeg: 0.0,
+        trueAnomalyDeg: 0.0,
+        dt: 60.0,
+        durationMin: 1440.0,
+        description: 'Круговая экваториальная орбита с периодом около суток.'
+      },
+      'Молния': {
+        semiMajorAxis: 26562.0,
+        eccentricity: 0.74,
+        inclinationDeg: 63.4,
+        raanDeg: 0.0,
+        argPerigeeDeg: 270.0,
+        trueAnomalyDeg: 0.0,
+        dt: 20.0,
+        durationMin: 760.0,
+        description: 'Вытянутая высокоэллиптическая орбита.'
+      }
+    };
+
+    const ids = [
+      'preset', 'preset-info', 'semiMajorAxis', 'eccentricity', 'inclinationDeg',
+      'raanDeg', 'argPerigeeDeg', 'trueAnomalyDeg', 'x0', 'y0', 'z0',
+      'vx0', 'vy0', 'vz0', 'speed', 'dt', 'durationMin', 'animationRate', 'forceModel',
+      'alwaysVisible', 'run', 'stop', 'reset', 'applyOrbit', 'applySpeed',
+      'viewGeneral', 'viewEquator', 'viewFront', 'viewRight', 'viewEcliptic', 'viewOrbit',
+      'showEquatorPlane', 'showEclipticPlane', 'summary', 'hud', 'error', 'scene'
+    ];
+    const el = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x08101f);
+
+    const camera = new THREE.PerspectiveCamera(45, sceneAspect(), 10, 240000);
+    camera.position.set(16500, -19000, 13000);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(el.scene.clientWidth, el.scene.clientHeight);
+    el.scene.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 1.9));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+    sun.position.set(2, -1, 1.5);
+    scene.add(sun);
+
+    const earthTexture = new THREE.TextureLoader().load('./assets/earth_blue_marble_2048.jpg');
+    earthTexture.colorSpace = THREE.SRGBColorSpace;
+    const earth = new THREE.Mesh(
+      new THREE.SphereGeometry(R_EARTH, 128, 64),
+      new THREE.MeshPhongMaterial({
+        map: earthTexture,
+        transparent: true,
+        opacity: 0.92,
+        shininess: 8
+      })
+    );
+    earth.rotation.x = Math.PI / 2;
+    scene.add(earth);
+
+    const equatorGreatCircle = new THREE.Line(
+      circleGeometry(R_EARTH * 1.002, 256, 'xy'),
+      new THREE.LineBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false
+      })
+    );
+    const eclipticGreatCircle = new THREE.Line(
+      circleGeometry(R_EARTH * 1.006, 256, 'xy'),
+      new THREE.LineBasicMaterial({
+        color: 0xfbbf24,
+        transparent: true,
+        opacity: 0.78,
+        depthWrite: false
+      })
+    );
+    eclipticGreatCircle.rotation.x = degToRad(EARTH_OBLIQUITY_DEG);
+    scene.add(equatorGreatCircle, eclipticGreatCircle);
+
+    const equatorPlane = makeReferencePlane(0x38bdf8, 0.045);
+    const eclipticPlane = makeReferencePlane(0xfbbf24, 0.055);
+    eclipticPlane.rotation.x = degToRad(EARTH_OBLIQUITY_DEG);
+    scene.add(equatorPlane, eclipticPlane);
+
+    const orbitLine = makeLine(0xffffff, 0.52, false);
+    const orbitLineVisible = makeLine(0xff4242, 1.0, false);
+    const trailLine = makeLine(0xffea00, 1.0, false);
+    scene.add(orbitLine, orbitLineVisible, trailLine);
+
+    const satellite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeSatelliteMarkerTexture(),
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false
+    }));
+    satellite.renderOrder = 14;
+    scene.add(satellite);
+
+    let history = [];
+    let times = [];
+    let speeds = [];
+    let renderPositions = [];
+    let renderStride = 1;
+    let frameIndex = 0;
+    let playing = true;
+    let lastTimestamp = 0;
+    let simulationClock = 0;
+    let viewDistance = 25000;
+    let syncingCamera = false;
+
+    resizeRenderer();
+    initControls();
+    applyPreset('МКС');
+    runSimulation();
+    animate(0);
+
+    window.addEventListener('resize', resizeRenderer);
+    el.run.addEventListener('click', runSimulation);
+    el.stop.addEventListener('click', () => { playing = false; });
+    el.reset.addEventListener('click', resetToStart);
+    el.applyOrbit.addEventListener('click', applyOrbitParameters);
+    el.applySpeed.addEventListener('click', applySpeed);
+    el.preset.addEventListener('change', () => applyPreset(el.preset.value));
+    el.forceModel.addEventListener('change', runSimulation);
+    el.viewGeneral.addEventListener('click', () => alignView('general'));
+    el.viewEquator.addEventListener('click', () => alignView('equator'));
+    el.viewFront.addEventListener('click', () => alignView('front'));
+    el.viewRight.addEventListener('click', () => alignView('right'));
+    el.viewEcliptic.addEventListener('click', () => alignView('ecliptic'));
+    el.viewOrbit.addEventListener('click', () => alignView('orbit'));
+    for (const id of ['vx0', 'vy0', 'vz0']) {
+      el[id].addEventListener('input', updateSpeedFromProjections);
+    }
+    el.alwaysVisible.addEventListener('change', updateDepthMode);
+    el.showEquatorPlane.addEventListener('change', updateReferencePlanesVisibility);
+    el.showEclipticPlane.addEventListener('change', updateReferencePlanesVisibility);
+
+    function initControls() {
+      for (const name of Object.keys(presets)) {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        el.preset.appendChild(option);
+      }
+
+      setConfigFields({
+        x0: DEFAULT_RADIUS,
+        y0: 0,
+        z0: 0,
+        vx0: 0,
+        vy0: DEFAULT_SPEED,
+        vz0: 1,
+        dt: 2,
+        durationMin: 180
+      });
+      el.animationRate.value = 60;
+      el.forceModel.value = 'twoBody';
+      updateSpeedFromProjections();
+    }
+
+    function applyPreset(name) {
+      el.preset.value = name;
+      const preset = presets[name];
+      if (!preset) {
+        el['preset-info'].textContent = 'Ручной режим: можно менять координаты, скорости, шаг и длительность.';
+        return;
+      }
+
+      setOrbitFields(preset);
+      const state = orbitalElementsToState(preset);
+      setConfigFields({
+        x0: state[0],
+        y0: state[1],
+        z0: state[2],
+        vx0: state[3],
+        vy0: state[4],
+        vz0: state[5],
+        dt: preset.dt,
+        durationMin: preset.durationMin
+      });
+      updateSpeedFromProjections();
+      el['preset-info'].textContent = presetSummary(preset);
+      runSimulation();
+    }
+
+    function setOrbitFields(values) {
+      for (const key of ['semiMajorAxis', 'eccentricity', 'inclinationDeg', 'raanDeg', 'argPerigeeDeg', 'trueAnomalyDeg']) {
+        el[key].value = formatNumber(values[key]);
+      }
+    }
+
+    function setConfigFields(values) {
+      for (const key of ['x0', 'y0', 'z0', 'vx0', 'vy0', 'vz0', 'dt', 'durationMin']) {
+        el[key].value = formatNumber(values[key]);
+      }
+    }
+
+    function applyOrbitParameters() {
+      try {
+        const state = orbitalElementsToState(readOrbitFields());
+        setConfigFields({
+          x0: state[0],
+          y0: state[1],
+          z0: state[2],
+          vx0: state[3],
+          vy0: state[4],
+          vz0: state[5],
+          dt: readNumber('dt'),
+          durationMin: readNumber('durationMin')
+        });
+        updateSpeedFromProjections();
+        el.preset.value = 'Пользовательская';
+        el['preset-info'].textContent = 'Параметры орбиты применены: координаты и скорости пересчитаны.';
+        runSimulation();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    function applySpeed() {
+      try {
+        const targetSpeed = readNumber('speed');
+        if (targetSpeed < 0) throw new Error('Полная скорость V не может быть отрицательной.');
+
+        const velocity = [readNumber('vx0'), readNumber('vy0'), readNumber('vz0')];
+        const currentSpeed = norm(velocity);
+        if (currentSpeed <= 1e-12) {
+          throw new Error('Нельзя применить V: направление скорости нулевое. Сначала задайте Vx, Vy или Vz.');
+        }
+
+        const scale = targetSpeed / currentSpeed;
+        el.vx0.value = formatNumber(velocity[0] * scale);
+        el.vy0.value = formatNumber(velocity[1] * scale);
+        el.vz0.value = formatNumber(velocity[2] * scale);
+        el.preset.value = 'Пользовательская';
+        el['preset-info'].textContent = 'Полная скорость V применена: проекции скорости масштабированы.';
+        runSimulation();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    function runSimulation() {
+      try {
+        hideError();
+        const config = readConfig();
+        const result = simulateOrbit(config);
+        history = result.history;
+        times = result.times;
+        speeds = history.map((state) => norm(state.slice(3, 6)));
+        frameIndex = 0;
+        simulationClock = 0;
+        playing = true;
+        updateSceneObjects(result.stoppedByCollision);
+        updateSummary(result.stoppedByCollision);
+        updateHud();
+      } catch (error) {
+        playing = false;
+        showError(error.message);
+      }
+    }
+
+    function resetToStart() {
+      playing = false;
+      frameIndex = 0;
+      simulationClock = 0;
+      updateTrail();
+      updateSatellite();
+      updateHud();
+    }
+
+    function updateSceneObjects(stoppedByCollision) {
+      renderStride = Math.max(1, Math.ceil(history.length / MAX_RENDER_POINTS));
+      renderPositions = makeRenderPositions(history, renderStride);
+
+      setLinePoints(orbitLine, renderPositions);
+      setLinePoints(orbitLineVisible, renderPositions);
+      setLinePoints(trailLine, renderPositions);
+      updateDepthMode();
+      updateReferencePlanes(renderPositions);
+      updateReferencePlanesVisibility();
+      updateTrail();
+      updateSatellite();
+      fitCameraToTrajectory(renderPositions);
+      if (stoppedByCollision) {
+        showError('Расчет остановлен: пересечение поверхности Земли.');
+      }
+    }
+
+    function updateDepthMode() {
+      const alwaysVisible = el.alwaysVisible.checked;
+      for (const line of [orbitLine, orbitLineVisible, trailLine]) {
+        line.material.depthTest = !alwaysVisible;
+        line.material.depthWrite = !alwaysVisible;
+        line.renderOrder = alwaysVisible ? 8 : 0;
+      }
+      satellite.material.depthTest = !alwaysVisible;
+      satellite.renderOrder = alwaysVisible ? 14 : 0;
+    }
+
+    function updateReferencePlanes(points) {
+      const maxAbs = points.reduce(
+        (maxValue, point) => Math.max(maxValue, Math.abs(point.x), Math.abs(point.y), Math.abs(point.z)),
+        R_EARTH
+      );
+      const planeRadius = Math.max(R_EARTH * 1.42, maxAbs * 1.04);
+      equatorPlane.scale.setScalar(planeRadius);
+      eclipticPlane.scale.setScalar(planeRadius);
+    }
+
+    function updateReferencePlanesVisibility() {
+      equatorPlane.visible = el.showEquatorPlane.checked;
+      eclipticPlane.visible = el.showEclipticPlane.checked;
+      equatorGreatCircle.visible = el.showEquatorPlane.checked;
+      eclipticGreatCircle.visible = el.showEclipticPlane.checked;
+    }
+
+    function updateTrail() {
+      if (!history.length || !renderPositions.length) return;
+      trailLine.geometry.setDrawRange(0, trailRenderCount());
+    }
+
+    function updateSatellite() {
+      if (!history.length) return;
+      const state = history[frameIndex];
+      satellite.position.set(state[0], state[1], state[2]);
+      updateSatelliteMarkerScale();
+    }
+
+    function updateHud() {
+      if (!history.length) return;
+      el.hud.innerHTML = `t = ${(times[frameIndex] / 60).toFixed(1)} мин<br>V = ${speeds[frameIndex].toFixed(3)} км/с`;
+    }
+
+    function updateSummary(stoppedByCollision) {
+      const state = history[0];
+      const position = state.slice(0, 3);
+      const velocity = state.slice(3, 6);
+      const radius = norm(position);
+      const speed = norm(velocity);
+      const altitude = radius - R_EARTH;
+      const energy = speed ** 2 / 2 - MU / radius;
+      const angularMomentum = cross(position, velocity);
+      const hNorm = norm(angularMomentum);
+      const dotRV = dot(position, velocity);
+      const eVector = position.map((p, i) => ((speed ** 2 - MU / radius) * p - dotRV * velocity[i]) / MU);
+      const eccentricity = norm(eVector);
+
+      const lines = [
+        `Frame: ${REFERENCE_FRAME}`,
+        `Time scale: ${TIME_SCALE}`,
+        `Units: ${UNITS}`,
+        `Force model: ${forceModelLabels[readForceModel()]}`,
+        '',
+        `Высота старта: ${altitude.toFixed(1)} км`,
+        `Скорость старта: ${speed.toFixed(3)} км/с`,
+        `Эксцентриситет: ${eccentricity.toFixed(4)}`
+      ];
+
+      if (energy < 0) {
+        const semiMajorAxis = -MU / (2 * energy);
+        const periodMin = 2 * Math.PI * Math.sqrt(semiMajorAxis ** 3 / MU) / 60;
+        lines.push(`Большая полуось: ${semiMajorAxis.toFixed(1)} км`);
+        lines.push(`Период: ${periodMin.toFixed(1)} мин`);
+      } else {
+        lines.push('Орбита: незамкнутая');
+      }
+
+      if (hNorm > 1e-9) {
+        const inclination = Math.acos(clamp(angularMomentum[2] / hNorm, -1, 1)) * 180 / Math.PI;
+        lines.push(`Наклонение: ${inclination.toFixed(2)} град`);
+      } else {
+        lines.push('Наклонение: не определено');
+      }
+
+      if (stoppedByCollision) {
+        lines.push('Расчет остановлен: пересечение поверхности Земли.');
+      }
+
+      el.summary.textContent = lines.join('\n');
+    }
+
+    function animate(timestamp) {
+      requestAnimationFrame(animate);
+      const deltaMs = lastTimestamp ? timestamp - lastTimestamp : 0;
+      lastTimestamp = timestamp;
+      controls.update();
+      updateSatelliteMarkerScale();
+
+      if (playing && history.length > 1) {
+        const animationRate = Math.max(0.1, readNumberOrDefault('animationRate', 60));
+        simulationClock += (deltaMs / 1000) * animationRate;
+        const dt = Math.max(1e-9, readNumberOrDefault('dt', 1));
+        const nextIndex = Math.floor(simulationClock / dt) % history.length;
+        if (nextIndex !== frameIndex) {
+          frameIndex = nextIndex;
+          updateTrail();
+          updateSatellite();
+          updateHud();
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function readConfig() {
+      const config = {
+        x0: readNumber('x0'),
+        y0: readNumber('y0'),
+        z0: readNumber('z0'),
+        vx0: readNumber('vx0'),
+        vy0: readNumber('vy0'),
+        vz0: readNumber('vz0'),
+        dt: readNumber('dt'),
+        durationMin: readNumber('durationMin'),
+        forceModel: readForceModel()
+      };
+      if (config.dt <= 0) throw new Error('Шаг dt должен быть больше нуля.');
+      if (config.durationMin <= 0) throw new Error('Длительность расчета должна быть больше нуля.');
+      if (norm([config.x0, config.y0, config.z0]) <= R_EARTH) {
+        throw new Error(`Начальная точка находится внутри Земли. Радиус должен быть больше ${R_EARTH.toFixed(0)} км.`);
+      }
+      return config;
+    }
+
+    function readForceModel() {
+      return el.forceModel.value === 'j2' ? 'j2' : 'twoBody';
+    }
+
+    function readOrbitFields() {
+      return {
+        semiMajorAxis: readNumber('semiMajorAxis'),
+        eccentricity: readNumber('eccentricity'),
+        inclinationDeg: readNumber('inclinationDeg'),
+        raanDeg: readNumber('raanDeg'),
+        argPerigeeDeg: readNumber('argPerigeeDeg'),
+        trueAnomalyDeg: readNumber('trueAnomalyDeg')
+      };
+    }
+
+    function readNumber(id) {
+      const value = Number(String(el[id].value).replace(',', '.'));
+      if (!Number.isFinite(value)) throw new Error(`Поле ${id}: введите число.`);
+      return value;
+    }
+
+    function readNumberOrDefault(id, fallback) {
+      const value = Number(String(el[id].value).replace(',', '.'));
+      return Number.isFinite(value) ? value : fallback;
+    }
+
+    function updateSpeedFromProjections() {
+      const velocity = ['vx0', 'vy0', 'vz0'].map((id) => Number(String(el[id].value).replace(',', '.')));
+      if (velocity.every(Number.isFinite)) {
+        el.speed.value = formatNumber(norm(velocity));
+      }
+    }
+
+    function simulateOrbit(config) {
+      const steps = Math.ceil(config.durationMin * 60 / config.dt);
+      if (steps > MAX_STEPS) {
+        throw new Error(`Слишком много шагов расчета: ${steps}. Увеличьте dt или уменьшите длительность.`);
+      }
+
+      const localHistory = [];
+      const localTimes = [];
+      let state = [config.x0, config.y0, config.z0, config.vx0, config.vy0, config.vz0];
+      let stoppedByCollision = false;
+      localHistory.push(state.slice());
+      localTimes.push(0);
+
+      for (let index = 1; index <= steps; index += 1) {
+        state = rk4Step(state, config.dt, config.forceModel);
+        localHistory.push(state.slice());
+        localTimes.push(index * config.dt);
+        if (norm(state.slice(0, 3)) <= R_EARTH) {
+          stoppedByCollision = true;
+          break;
+        }
+      }
+
+      return { history: localHistory, times: localTimes, stoppedByCollision };
+    }
+
+    function deriv(state, forceModel) {
+      const [x, y, z, vx, vy, vz] = state;
+      const radius = Math.sqrt(x * x + y * y + z * z);
+      if (radius <= 0) throw new Error('Радиус-вектор не может быть нулевым.');
+      const centralFactor = -MU / radius ** 3;
+      const acceleration = [centralFactor * x, centralFactor * y, centralFactor * z];
+
+      if (forceModel === 'j2') {
+        const radius2 = radius * radius;
+        const z2Ratio = z * z / radius2;
+        const factor = 1.5 * J2 * MU * J2_REFERENCE_RADIUS ** 2 / radius ** 5;
+        acceleration[0] += factor * x * (5 * z2Ratio - 1);
+        acceleration[1] += factor * y * (5 * z2Ratio - 1);
+        acceleration[2] += factor * z * (5 * z2Ratio - 3);
+      }
+
+      return [vx, vy, vz, acceleration[0], acceleration[1], acceleration[2]];
+    }
+
+    function rk4Step(state, dt, forceModel) {
+      const k1 = deriv(state, forceModel);
+      const k2 = deriv(state.map((v, i) => v + 0.5 * dt * k1[i]), forceModel);
+      const k3 = deriv(state.map((v, i) => v + 0.5 * dt * k2[i]), forceModel);
+      const k4 = deriv(state.map((v, i) => v + dt * k3[i]), forceModel);
+      return state.map((v, i) => v + (dt / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+    }
+
+    function orbitalElementsToState(elements) {
+      const a = elements.semiMajorAxis;
+      const e = elements.eccentricity;
+      if (a <= R_EARTH) throw new Error('Большая полуось должна быть больше радиуса Земли.');
+      if (e < 0 || e >= 1) throw new Error('Эксцентриситет должен быть в диапазоне [0, 1).');
+      if (a * (1 - e) <= R_EARTH) throw new Error('Перигей орбиты находится внутри Земли. Уменьшите e или увеличьте a.');
+
+      const p = a * (1 - e * e);
+      const nu = degToRad(elements.trueAnomalyDeg);
+      const radius = p / (1 + e * Math.cos(nu));
+      const posOrb = [radius * Math.cos(nu), radius * Math.sin(nu), 0];
+      const velFactor = Math.sqrt(MU / p);
+      const velOrb = [-Math.sin(nu) * velFactor, (e + Math.cos(nu)) * velFactor, 0];
+      const rotation = multiplyMatrices(
+        multiplyMatrices(rotationZ(elements.raanDeg), rotationX(elements.inclinationDeg)),
+        rotationZ(elements.argPerigeeDeg)
+      );
+      return [...multiplyMatrixVector(rotation, posOrb), ...multiplyMatrixVector(rotation, velOrb)];
+    }
+
+    function presetSummary(preset) {
+      const perigeeAlt = preset.semiMajorAxis * (1 - preset.eccentricity) - R_EARTH;
+      const apogeeAlt = preset.semiMajorAxis * (1 + preset.eccentricity) - R_EARTH;
+      return `${preset.description}
+a = ${preset.semiMajorAxis.toFixed(1)} км, e = ${preset.eccentricity.toFixed(4)}
+i = ${preset.inclinationDeg.toFixed(2)} град, высота = ${perigeeAlt.toFixed(0)}-${apogeeAlt.toFixed(0)} км
+dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durationMin)} мин`;
+    }
+
+    function makeLine(color, opacity, depthTest) {
+      const line = new THREE.Line(
+        new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({
+          color,
+          transparent: opacity < 1,
+          opacity,
+          depthTest,
+          depthWrite: depthTest
+        })
+      );
+      line.frustumCulled = false;
+      return line;
+    }
+
+    function makeReferencePlane(color, opacity) {
+      const group = new THREE.Group();
+      const fill = new THREE.Mesh(
+        new THREE.CircleGeometry(1, 192),
+        new THREE.MeshBasicMaterial({
+          color,
+          opacity,
+          transparent: true,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        })
+      );
+      const rim = new THREE.Line(
+        circleGeometry(1, 192, 'xy'),
+        new THREE.LineBasicMaterial({
+          color,
+          transparent: true,
+          opacity: Math.min(0.5, opacity * 6),
+          depthWrite: false
+        })
+      );
+      fill.renderOrder = 2;
+      rim.renderOrder = 3;
+      group.add(fill, rim);
+      return group;
+    }
+
+    function makeSatelliteMarkerTexture() {
+      const size = 128;
+      const center = size / 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext('2d');
+
+      context.clearRect(0, 0, size, size);
+      context.beginPath();
+      context.arc(center, center, 58, 0, Math.PI * 2);
+      context.fillStyle = 'rgba(3, 7, 18, 0.96)';
+      context.fill();
+
+      context.beginPath();
+      context.arc(center, center, 47, 0, Math.PI * 2);
+      context.fillStyle = '#ffffff';
+      context.fill();
+
+      context.beginPath();
+      context.arc(center, center, 31, 0, Math.PI * 2);
+      context.fillStyle = '#ffe600';
+      context.fill();
+
+      context.lineWidth = 7;
+      context.strokeStyle = '#111827';
+      context.beginPath();
+      context.arc(center, center, 31, 0, Math.PI * 2);
+      context.stroke();
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      return texture;
+    }
+
+    function updateSatelliteMarkerScale() {
+      if (!history.length) return;
+      const distance = camera.position.distanceTo(satellite.position);
+      const canvasHeight = Math.max(1, renderer.domElement.clientHeight);
+      const fovRadians = THREE.MathUtils.degToRad(camera.fov);
+      const worldUnitsPerPixel = 2 * distance * Math.tan(fovRadians / 2) / canvasHeight;
+      const markerSize = clamp(worldUnitsPerPixel * 30, 420, 3600);
+      satellite.scale.set(markerSize, markerSize, 1);
+    }
+
+    function setLinePoints(line, points) {
+      const positions = new Float32Array(points.length * 3);
+      for (let index = 0; index < points.length; index += 1) {
+        const point = points[index];
+        const offset = index * 3;
+        positions[offset] = point.x;
+        positions[offset + 1] = point.y;
+        positions[offset + 2] = point.z;
+      }
+
+      line.geometry.dispose();
+      line.geometry = new THREE.BufferGeometry();
+      line.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      line.geometry.setDrawRange(0, points.length);
+      line.geometry.computeBoundingSphere();
+    }
+
+    function makeRenderPositions(states, stride) {
+      const positions = [];
+      for (let index = 0; index < states.length; index += stride) {
+        const state = states[index];
+        positions.push(new THREE.Vector3(state[0], state[1], state[2]));
+      }
+
+      const lastState = states[states.length - 1];
+      const lastPosition = positions[positions.length - 1];
+      if (
+        lastState &&
+        (!lastPosition ||
+          lastPosition.x !== lastState[0] ||
+          lastPosition.y !== lastState[1] ||
+          lastPosition.z !== lastState[2])
+      ) {
+        positions.push(new THREE.Vector3(lastState[0], lastState[1], lastState[2]));
+      }
+
+      return positions;
+    }
+
+    function trailRenderCount() {
+      if (frameIndex >= history.length - 1) {
+        return renderPositions.length;
+      }
+      return Math.min(renderPositions.length, Math.max(1, Math.floor(frameIndex / renderStride) + 1));
+    }
+
+    function circleGeometry(radius, segments, plane) {
+      const points = [];
+      for (let i = 0; i <= segments; i += 1) {
+        const angle = i / segments * Math.PI * 2;
+        if (plane === 'xy') {
+          points.push(new THREE.Vector3(radius * Math.cos(angle), radius * Math.sin(angle), 0));
+        }
+      }
+      return new THREE.BufferGeometry().setFromPoints(points);
+    }
+
+    function fitCameraToTrajectory(points) {
+      if (!points.length) return;
+      const maxAbs = points.reduce((maxValue, point) => Math.max(maxValue, Math.abs(point.x), Math.abs(point.y), Math.abs(point.z)), R_EARTH);
+      viewDistance = maxAbs * 2.55;
+      camera.near = Math.max(1, viewDistance / 10000);
+      camera.far = viewDistance * 12;
+      camera.updateProjectionMatrix();
+      controls.target.set(0, 0, 0);
+      if (!controls.userData?.userMoved) {
+        camera.position.set(viewDistance * 0.62, -viewDistance * 0.74, viewDistance * 0.48);
+      }
+      updateControlsFromCode();
+    }
+    controls.addEventListener('change', () => {
+      if (!syncingCamera) {
+        controls.userData = { userMoved: true };
+      }
+    });
+
+    function alignView(mode) {
+      setActiveView(mode);
+      if (mode === 'general') {
+        controls.userData = { userMoved: false };
+        fitCameraToTrajectory(renderPositions);
+        return;
+      }
+      if (mode === 'equator') {
+        setCameraView(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0));
+        return;
+      }
+      if (mode === 'front') {
+        setCameraView(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1));
+        return;
+      }
+      if (mode === 'right') {
+        setCameraView(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1));
+        return;
+      }
+      if (mode === 'ecliptic') {
+        const eps = degToRad(EARTH_OBLIQUITY_DEG);
+        setCameraView(
+          new THREE.Vector3(0, -Math.sin(eps), Math.cos(eps)),
+          new THREE.Vector3(0, Math.cos(eps), Math.sin(eps))
+        );
+        return;
+      }
+      if (mode === 'orbit') {
+        const normal = currentOrbitNormal();
+        setCameraView(normal, new THREE.Vector3(0, 0, 1));
+      }
+    }
+
+    function setActiveView(mode) {
+      const activeByMode = {
+        general: el.viewGeneral,
+        equator: el.viewEquator,
+        front: el.viewFront,
+        right: el.viewRight,
+        ecliptic: el.viewEcliptic,
+        orbit: el.viewOrbit
+      };
+      for (const button of Object.values(activeByMode)) {
+        button.classList.remove('active');
+      }
+      activeByMode[mode]?.classList.add('active');
+    }
+
+    function setCameraView(direction, up) {
+      const viewDirection = direction.clone().normalize();
+      const distance = Math.max(viewDistance, R_EARTH * 2.8);
+      camera.position.copy(viewDirection.multiplyScalar(distance));
+      camera.up.copy(safeCameraUp(direction, up));
+      camera.lookAt(0, 0, 0);
+      controls.target.set(0, 0, 0);
+      controls.userData = { userMoved: true };
+      updateControlsFromCode();
+    }
+
+    function safeCameraUp(direction, preferredUp) {
+      const viewDirection = direction.clone().normalize();
+      let up = preferredUp.clone().normalize();
+      if (Math.abs(up.dot(viewDirection)) > 0.95) {
+        up = new THREE.Vector3(0, 1, 0);
+      }
+      if (Math.abs(up.dot(viewDirection)) > 0.95) {
+        up = new THREE.Vector3(1, 0, 0);
+      }
+      return up;
+    }
+
+    function currentOrbitNormal() {
+      if (!history.length) return new THREE.Vector3(0, 0, 1);
+      const state = history[0];
+      const position = new THREE.Vector3(state[0], state[1], state[2]);
+      const velocity = new THREE.Vector3(state[3], state[4], state[5]);
+      const normal = position.cross(velocity);
+      if (normal.lengthSq() <= 1e-12) return new THREE.Vector3(0, 0, 1);
+      return normal.normalize();
+    }
+
+    function updateControlsFromCode() {
+      syncingCamera = true;
+      controls.update();
+      syncingCamera = false;
+    }
+
+    function resizeRenderer() {
+      const width = el.scene.clientWidth;
+      const height = el.scene.clientHeight;
+      renderer.setSize(width, height);
+      camera.aspect = sceneAspect();
+      camera.updateProjectionMatrix();
+      updateSatelliteMarkerScale();
+    }
+
+    function sceneAspect() {
+      return Math.max(1, el.scene.clientWidth) / Math.max(1, el.scene.clientHeight);
+    }
+
+    function showError(message) {
+      el.error.textContent = message;
+      el.error.style.display = 'block';
+    }
+
+    function hideError() {
+      el.error.textContent = '';
+      el.error.style.display = 'none';
+    }
+
+    function formatNumber(value) {
+      return Number(value).toPrecision(9).replace(/\.?0+$/, '');
+    }
+
+    function formatCompact(value) {
+      return Number(value).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+    }
+
+    function degToRad(deg) {
+      return deg * Math.PI / 180;
+    }
+
+    function norm(vector) {
+      return Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+    }
+
+    function dot(a, b) {
+      return a.reduce((sum, value, index) => sum + value * b[index], 0);
+    }
+
+    function cross(a, b) {
+      return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0]
+      ];
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function rotationX(deg) {
+      const a = degToRad(deg);
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      return [[1, 0, 0], [0, c, -s], [0, s, c]];
+    }
+
+    function rotationZ(deg) {
+      const a = degToRad(deg);
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
+    }
+
+    function multiplyMatrices(a, b) {
+      return a.map((row, i) => row.map((_, j) => a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j]));
+    }
+
+    function multiplyMatrixVector(matrix, vector) {
+      return matrix.map((row) => row[0] * vector[0] + row[1] * vector[1] + row[2] * vector[2]);
+    }
+  </script>
+</body>
+</html>
