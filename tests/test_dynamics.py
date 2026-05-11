@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from orbiter.dynamics import (
+    EARTH_HOME_POINT,
     J2_MODEL,
+    MOSCOW_LATITUDE_DEG,
+    MOSCOW_LONGITUDE_DEG,
     MU,
     ORBIT_PRESETS,
     R_EARTH,
     TWO_BODY_MODEL,
     SimulationConfig,
     acceleration,
+    geodetic_surface_point,
     orbital_elements_to_state,
+    orbital_summary,
     rotation_x,
     rotation_z,
     simulate_orbit,
@@ -43,6 +49,16 @@ def test_rotation_matrices_use_degrees() -> None:
         [0.0, 1.0, 0.0],
         atol=1e-12,
     )
+
+
+def test_geodetic_surface_point_uses_degrees_and_km() -> None:
+    np.testing.assert_allclose(geodetic_surface_point(0.0, 0.0), [R_EARTH, 0.0, 0.0])
+    np.testing.assert_allclose(geodetic_surface_point(90.0, 0.0), [0.0, 0.0, R_EARTH], atol=1e-9)
+
+    moscow = geodetic_surface_point(MOSCOW_LATITUDE_DEG, MOSCOW_LONGITUDE_DEG)
+    assert np.linalg.norm(moscow) == pytest.approx(R_EARTH)
+    assert np.degrees(np.arctan2(moscow[1], moscow[0])) == pytest.approx(MOSCOW_LONGITUDE_DEG)
+    assert np.degrees(np.arcsin(moscow[2] / R_EARTH)) == pytest.approx(MOSCOW_LATITUDE_DEG)
 
 
 def test_duration_minutes_and_step_seconds_define_time_grid() -> None:
@@ -88,3 +104,12 @@ def test_j2_force_model_changes_acceleration_but_keeps_units() -> None:
     assert two_body.shape == (3,)
     assert j2.shape == (3,)
     assert np.linalg.norm(j2 - two_body) > 1e-8
+
+
+def test_orbital_summary_states_moscow_home_point() -> None:
+    config = ORBIT_PRESETS["МКС"].to_config()
+    history, _times, stopped_by_collision = simulate_orbit(config)
+
+    summary = orbital_summary(history, stopped_by_collision)
+
+    assert EARTH_HOME_POINT in summary

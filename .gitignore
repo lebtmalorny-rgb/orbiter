@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+.idea/
+.pytest_cache/
+.ruff_cache/
+.serena/
+.playwright-mcp/
+*.log
+*.out
+*.png

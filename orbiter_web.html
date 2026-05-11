@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>3D визуализация движения спутника</title>
   <style>
     :root {
@@ -168,7 +169,7 @@
     #error {
       position: absolute;
       right: 16px;
-      top: 188px;
+      top: 16px;
       max-width: 360px;
       padding: 10px 12px;
       border-radius: 8px;
@@ -178,94 +179,130 @@
       display: none;
     }
 
+    #scene canvas {
+      cursor: grab;
+    }
+
+    #scene canvas:active {
+      cursor: grabbing;
+    }
+
     #view-panel {
       position: absolute;
-      right: 16px;
-      top: 16px;
+      right: 18px;
+      bottom: 22px;
       display: grid;
-      grid-template-columns: 34px 96px;
-      gap: 8px;
-      align-items: start;
-      padding: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 8px;
-      background: rgba(10, 16, 32, 0.58);
-      backdrop-filter: blur(8px);
+      gap: 7px;
+      width: 64px;
       z-index: 5;
+      pointer-events: auto;
     }
 
     #view-panel button {
+      display: grid;
+      place-items: center;
       min-height: 30px;
-      border: 1px solid rgba(148, 163, 184, 0.48);
-      border-radius: 6px;
-      color: #e5eefb;
-      background: rgba(30, 41, 59, 0.82);
+      border: 1px solid rgba(226, 232, 240, 0.22);
+      border-radius: 999px;
+      color: #f8fafc;
+      background: rgba(9, 15, 30, 0.72);
+      background-image: none;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.26);
       font-size: 12px;
-      font-weight: 650;
+      font-weight: 700;
+      line-height: 1;
+      text-align: center;
+      appearance: none;
+      backdrop-filter: blur(8px);
+      user-select: none;
     }
 
     #view-panel button:hover,
     #view-panel button.active {
-      border-color: rgba(56, 189, 248, 0.9);
-      background: rgba(14, 116, 144, 0.86);
+      border-color: rgba(125, 211, 252, 0.9);
+      background: rgba(14, 116, 144, 0.78);
       filter: none;
     }
 
     .view-home {
-      width: 34px;
-      height: 34px;
-      padding: 0;
-    }
-
-    .view-stack {
-      display: grid;
-      gap: 8px;
-    }
-
-    .view-cube {
-      position: relative;
-      width: 96px;
-      height: 96px;
-      perspective: 420px;
-    }
-
-    .cube-core {
-      position: absolute;
-      left: 25px;
-      top: 25px;
-      width: 46px;
-      height: 46px;
-      transform-style: preserve-3d;
-      transform: rotateX(-28deg) rotateY(38deg);
-    }
-
-    .cube-face {
-      position: absolute;
       display: grid;
       place-items: center;
-      width: 46px;
-      height: 46px;
+      width: 38px;
+      height: 38px;
       padding: 0;
-      backface-visibility: hidden;
+      justify-self: center;
+      font-size: 16px;
+      line-height: 1;
     }
 
-    .cube-top {
-      transform: rotateX(90deg) translateZ(23px);
+    .view-compass {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+      width: 64px;
     }
 
-    .cube-front {
-      transform: translateZ(23px);
+    .compass-button {
+      display: grid;
+      place-items: center;
+      width: 29px;
+      height: 29px;
+      min-height: 29px;
+      padding: 0;
+      font-size: 10px;
     }
 
-    .cube-right {
-      transform: rotateY(90deg) translateZ(23px);
+    .compass-north {
+      grid-column: 1 / -1;
+      justify-self: center;
+      color: #c7d2fe;
+      background: rgba(49, 46, 129, 0.72);
     }
 
+    .compass-front {
+      color: #bbf7d0;
+      background: rgba(20, 83, 45, 0.72);
+    }
+
+    .compass-right {
+      color: #fca5a5;
+      background: rgba(127, 29, 29, 0.7);
+    }
+
+    .compass-axis {
+      display: none;
+    }
+
+    .view-zoom,
+    .view-follow,
     .view-extra,
     .plane-switches {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      gap: 5px;
+    }
+
+    .view-zoom button,
+    .view-follow button,
+    .view-extra button {
+      height: 30px;
+      min-height: 30px;
+      padding: 0;
+    }
+
+    .view-extra button,
+    .plane-switch span {
+      font-size: 10px;
+    }
+
+    .view-follow {
+      grid-template-columns: 1fr;
+    }
+
+    #viewFollow.following {
+      border-color: rgba(250, 204, 21, 0.95);
+      color: #fffbeb;
+      background: rgba(161, 98, 7, 0.86);
     }
 
     .plane-switch {
@@ -285,12 +322,16 @@
       place-items: center;
       height: 30px;
       border: 1px solid rgba(148, 163, 184, 0.48);
-      border-radius: 6px;
+      border-radius: 999px;
       color: #cbd5e1;
-      background: rgba(30, 41, 59, 0.72);
-      font-size: 12px;
+      background: rgba(15, 23, 42, 0.82);
       font-weight: 700;
+      line-height: 1;
+      text-align: center;
+      appearance: none;
       cursor: pointer;
+      pointer-events: auto;
+      user-select: none;
     }
 
     .plane-switch input:checked + span {
@@ -317,13 +358,13 @@
 
       #view-panel {
         right: 10px;
-        top: 10px;
+        bottom: 10px;
         transform: scale(0.86);
-        transform-origin: top right;
+        transform-origin: bottom right;
       }
 
       #error {
-        top: 152px;
+        top: 10px;
         right: 10px;
         max-width: calc(100vw - 20px);
       }
@@ -397,29 +438,35 @@
     <main id="scene">
       <div id="hud">t = 0.0 мин<br>V = 0.000 км/с</div>
       <nav id="view-panel" aria-label="Управление видом">
-        <button id="viewGeneral" class="view-home active" type="button" title="Общий вид">Home</button>
-        <div class="view-stack">
-          <div class="view-cube" aria-label="ViewCube">
-            <div class="cube-core">
-              <button id="viewEquator" class="cube-face cube-top" type="button" title="Вид сверху вдоль +Z">Top</button>
-              <button id="viewFront" class="cube-face cube-front" type="button" title="Фронтальный вид">Front</button>
-              <button id="viewRight" class="cube-face cube-right" type="button" title="Вид справа">Right</button>
-            </div>
-          </div>
-          <div class="view-extra">
-            <button id="viewEcliptic" type="button" title="Вид вдоль нормали эклиптики">ECL</button>
-            <button id="viewOrbit" type="button" title="Вид вдоль нормали орбиты">ORB</button>
-          </div>
-          <div class="plane-switches">
-            <label class="plane-switch" title="Показать плоскость экватора">
-              <input id="showEquatorPlane" type="checkbox" checked>
-              <span>EQ</span>
-            </label>
-            <label class="plane-switch" title="Показать плоскость эклиптики">
-              <input id="showEclipticPlane" type="checkbox" checked>
-              <span>ECL</span>
-            </label>
-          </div>
+        <button id="viewGeneral" class="view-home active" type="button" aria-label="Домой над Москвой" title="Домой над Москвой">⌂</button>
+        <div class="view-compass" aria-label="Компас вида">
+          <div class="compass-axis x"></div>
+          <div class="compass-axis y"></div>
+          <div class="compass-axis z"></div>
+          <button id="viewEquator" class="compass-button compass-north" type="button" title="Вид вдоль +Z">Z</button>
+          <button id="viewFront" class="compass-button compass-front" type="button" title="Вид вдоль -Y">Y</button>
+          <button id="viewRight" class="compass-button compass-right" type="button" title="Вид вдоль +X">X</button>
+        </div>
+        <div class="view-zoom">
+          <button id="viewZoomIn" type="button" title="Приблизить">+</button>
+          <button id="viewZoomOut" type="button" title="Отдалить">-</button>
+        </div>
+        <div class="view-follow">
+          <button id="viewFollow" type="button" aria-label="Следить за спутником" title="Следить за спутником">SAT</button>
+        </div>
+        <div class="view-extra">
+          <button id="viewEcliptic" type="button" title="Вид вдоль нормали эклиптики">ECL</button>
+          <button id="viewOrbit" type="button" title="Вид вдоль нормали орбиты">ORB</button>
+        </div>
+        <div class="plane-switches">
+          <label class="plane-switch" title="Показать плоскость экватора">
+            <input id="showEquatorPlane" type="checkbox" checked>
+            <span>EQ</span>
+          </label>
+          <label class="plane-switch" title="Показать плоскость эклиптики">
+            <input id="showEclipticPlane" type="checkbox" checked>
+            <span>ECL</span>
+          </label>
         </div>
       </nav>
       <div id="error"></div>
@@ -447,9 +494,15 @@
     const MAX_STEPS = 200000;
     const MAX_RENDER_POINTS = 12000;
     const EARTH_OBLIQUITY_DEG = 23.439281;
+    const MOSCOW_HOME = Object.freeze({
+      label: 'Москва',
+      latitudeDeg: 55.7558,
+      longitudeDeg: 37.6173
+    });
     const REFERENCE_FRAME = 'Геоцентрическая инерциальная Cartesian-система, оси X/Y/Z.';
     const TIME_SCALE = 'Относительное модельное время от t=0; UTC/TT/TDB не используются.';
     const UNITS = 'Положение: км; скорость: км/с; время: с и мин; углы: градусы.';
+    const EARTH_HOME_POINT = `${MOSCOW_HOME.label}: ${MOSCOW_HOME.latitudeDeg.toFixed(4)} deg N, ${MOSCOW_HOME.longitudeDeg.toFixed(4)} deg E; статичная сферическая Земля.`;
     const forceModelLabels = {
       twoBody: 'Двухтельная модель: точечная Земля, без J2, атмосферы и третьих тел.',
       j2: 'Двухтельная модель + J2 Земли, без атмосферы, тяги и третьих тел.'
@@ -552,10 +605,16 @@
       'raanDeg', 'argPerigeeDeg', 'trueAnomalyDeg', 'x0', 'y0', 'z0',
       'vx0', 'vy0', 'vz0', 'speed', 'dt', 'durationMin', 'animationRate', 'forceModel',
       'alwaysVisible', 'run', 'stop', 'reset', 'applyOrbit', 'applySpeed',
-      'viewGeneral', 'viewEquator', 'viewFront', 'viewRight', 'viewEcliptic', 'viewOrbit',
+      'viewGeneral', 'viewEquator', 'viewFront', 'viewRight', 'viewZoomIn', 'viewZoomOut',
+      'viewFollow', 'viewEcliptic', 'viewOrbit',
       'showEquatorPlane', 'showEclipticPlane', 'summary', 'hud', 'error', 'scene'
     ];
     const el = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
+    const compassAxes = {
+      x: document.querySelector('.compass-axis.x'),
+      y: document.querySelector('.compass-axis.y'),
+      z: document.querySelector('.compass-axis.z')
+    };
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x08101f);
@@ -571,6 +630,16 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 0.72;
+    controls.zoomSpeed = 0.84;
+    controls.panSpeed = 0.48;
+    controls.screenSpacePanning = false;
+    controls.minDistance = R_EARTH * 1.08;
+    controls.maxDistance = 240000;
+    controls.minTargetRadius = 0;
+    controls.maxTargetRadius = R_EARTH * 0.35;
+    controls.cursor.set(0, 0, 0);
+    controls.listenToKeyEvents(window);
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.9));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -590,6 +659,19 @@
     );
     earth.rotation.x = Math.PI / 2;
     scene.add(earth);
+
+    const atmosphere = makeAtmosphere();
+    scene.add(atmosphere);
+
+    const earthGraticule = makeEarthGraticule();
+    scene.add(earthGraticule);
+
+    const moscowHomeMarker = makeGroundMarker(
+      MOSCOW_HOME.label,
+      MOSCOW_HOME.latitudeDeg,
+      MOSCOW_HOME.longitudeDeg
+    );
+    scene.add(moscowHomeMarker.group);
 
     const equatorGreatCircle = new THREE.Line(
       circleGeometry(R_EARTH * 1.002, 256, 'xy'),
@@ -617,10 +699,16 @@
     eclipticPlane.rotation.x = degToRad(EARTH_OBLIQUITY_DEG);
     scene.add(equatorPlane, eclipticPlane);
 
-    const orbitLine = makeLine(0xffffff, 0.52, false);
-    const orbitLineVisible = makeLine(0xff4242, 1.0, false);
-    const trailLine = makeLine(0xffea00, 1.0, false);
-    scene.add(orbitLine, orbitLineVisible, trailLine);
+    const earthAxes = makeEarthAxes();
+    const axisLabelSprites = earthAxes.labels;
+    const axisCenterSprite = earthAxes.center;
+    scene.add(earthAxes.group);
+
+    const orbitLine = makeLine(0x7dd3fc, 0.28, false);
+    const orbitLineVisible = makeLine(0xfff7ed, 0.92, true);
+    const trailLine = makeLine(0xffea00, 1.0, true);
+    const positionVectorLine = makeLine(0x93c5fd, 0.62, false);
+    scene.add(orbitLine, orbitLineVisible, trailLine, positionVectorLine);
 
     const satellite = new THREE.Sprite(new THREE.SpriteMaterial({
       map: makeSatelliteMarkerTexture(),
@@ -643,6 +731,7 @@
     let simulationClock = 0;
     let viewDistance = 25000;
     let syncingCamera = false;
+    let followSatellite = false;
 
     resizeRenderer();
     initControls();
@@ -662,8 +751,12 @@
     el.viewEquator.addEventListener('click', () => alignView('equator'));
     el.viewFront.addEventListener('click', () => alignView('front'));
     el.viewRight.addEventListener('click', () => alignView('right'));
+    el.viewZoomIn.addEventListener('click', () => zoomView(0.72));
+    el.viewZoomOut.addEventListener('click', () => zoomView(1.38));
+    el.viewFollow.addEventListener('click', () => setFollowSatellite(!followSatellite));
     el.viewEcliptic.addEventListener('click', () => alignView('ecliptic'));
     el.viewOrbit.addEventListener('click', () => alignView('orbit'));
+    renderer.domElement.addEventListener('dblclick', () => alignView('general'));
     for (const id of ['vx0', 'vy0', 'vz0']) {
       el[id].addEventListener('input', updateSpeedFromProjections);
     }
@@ -825,21 +918,28 @@
 
     function updateDepthMode() {
       const alwaysVisible = el.alwaysVisible.checked;
-      for (const line of [orbitLine, orbitLineVisible, trailLine]) {
+      orbitLine.material.depthTest = false;
+      orbitLine.material.depthWrite = false;
+      orbitLine.material.transparent = true;
+      orbitLine.material.opacity = alwaysVisible ? 0.18 : 0.28;
+      orbitLine.renderOrder = 4;
+
+      for (const line of [orbitLineVisible, trailLine, positionVectorLine]) {
         line.material.depthTest = !alwaysVisible;
-        line.material.depthWrite = !alwaysVisible;
-        line.renderOrder = alwaysVisible ? 8 : 0;
+        line.material.depthWrite = false;
+        line.material.transparent = true;
+        line.renderOrder = alwaysVisible ? 8 : 5;
       }
+      orbitLineVisible.material.opacity = alwaysVisible ? 0.94 : 0.86;
+      trailLine.material.opacity = alwaysVisible ? 1.0 : 0.95;
+      positionVectorLine.material.opacity = alwaysVisible ? 0.68 : 0.48;
       satellite.material.depthTest = !alwaysVisible;
       satellite.renderOrder = alwaysVisible ? 14 : 0;
     }
 
     function updateReferencePlanes(points) {
-      const maxAbs = points.reduce(
-        (maxValue, point) => Math.max(maxValue, Math.abs(point.x), Math.abs(point.y), Math.abs(point.z)),
-        R_EARTH
-      );
-      const planeRadius = Math.max(R_EARTH * 1.42, maxAbs * 1.04);
+      const maxRadius = points.reduce((maxValue, point) => Math.max(maxValue, point.length()), R_EARTH);
+      const planeRadius = Math.max(R_EARTH * 1.42, maxRadius * 1.04);
       equatorPlane.scale.setScalar(planeRadius);
       eclipticPlane.scale.setScalar(planeRadius);
     }
@@ -859,13 +959,17 @@
     function updateSatellite() {
       if (!history.length) return;
       const state = history[frameIndex];
-      satellite.position.set(state[0], state[1], state[2]);
+      const position = new THREE.Vector3(state[0], state[1], state[2]);
+      satellite.position.copy(position);
+      setPositionVectorLine(position);
       updateSatelliteMarkerScale();
+      updateFollowTarget();
     }
 
     function updateHud() {
       if (!history.length) return;
-      el.hud.innerHTML = `t = ${(times[frameIndex] / 60).toFixed(1)} мин<br>V = ${speeds[frameIndex].toFixed(3)} км/с`;
+      const altitude = norm(history[frameIndex].slice(0, 3)) - R_EARTH;
+      el.hud.innerHTML = `t = ${(times[frameIndex] / 60).toFixed(1)} мин<br>h = ${altitude.toFixed(1)} км<br>V = ${speeds[frameIndex].toFixed(3)} км/с`;
     }
 
     function updateSummary(stoppedByCollision) {
@@ -887,6 +991,7 @@
         `Time scale: ${TIME_SCALE}`,
         `Units: ${UNITS}`,
         `Force model: ${forceModelLabels[readForceModel()]}`,
+        `Earth home: ${EARTH_HOME_POINT}`,
         '',
         `Высота старта: ${altitude.toFixed(1)} км`,
         `Скорость старта: ${speed.toFixed(3)} км/с`,
@@ -922,6 +1027,8 @@
       lastTimestamp = timestamp;
       controls.update();
       updateSatelliteMarkerScale();
+      updateAxisMarkerScale();
+      updateViewCompass();
 
       if (playing && history.length > 1) {
         const animationRate = Math.max(0.1, readNumberOrDefault('animationRate', 60));
@@ -1116,6 +1223,248 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
       return group;
     }
 
+    function makeAtmosphere() {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(R_EARTH * 1.018, 128, 64),
+        new THREE.MeshBasicMaterial({
+          color: 0x7dd3fc,
+          transparent: true,
+          opacity: 0.09,
+          blending: THREE.AdditiveBlending,
+          side: THREE.BackSide,
+          depthWrite: false
+        })
+      );
+      mesh.renderOrder = 1;
+      return mesh;
+    }
+
+    function makeEarthGraticule() {
+      const group = new THREE.Group();
+      const radius = R_EARTH * 1.0035;
+      const material = new THREE.LineBasicMaterial({
+        color: 0xbfe9ff,
+        transparent: true,
+        opacity: 0.24,
+        depthTest: true,
+        depthWrite: false
+      });
+
+      for (let latitude = -60; latitude <= 60; latitude += 30) {
+        group.add(new THREE.Line(graticuleLatitudeGeometry(radius, latitude), material.clone()));
+      }
+
+      for (let longitude = 0; longitude < 360; longitude += 30) {
+        group.add(new THREE.Line(graticuleLongitudeGeometry(radius, longitude), material.clone()));
+      }
+
+      group.renderOrder = 6;
+      return group;
+    }
+
+    function graticuleLatitudeGeometry(radius, latitudeDeg) {
+      const points = [];
+      const latitude = degToRad(latitudeDeg);
+      const z = radius * Math.sin(latitude);
+      const ringRadius = radius * Math.cos(latitude);
+      for (let step = 0; step <= 192; step += 1) {
+        const longitude = step / 192 * Math.PI * 2;
+        points.push(new THREE.Vector3(
+          ringRadius * Math.cos(longitude),
+          ringRadius * Math.sin(longitude),
+          z
+        ));
+      }
+      return new THREE.BufferGeometry().setFromPoints(points);
+    }
+
+    function graticuleLongitudeGeometry(radius, longitudeDeg) {
+      const points = [];
+      const longitude = degToRad(longitudeDeg);
+      for (let step = -96; step <= 96; step += 1) {
+        const latitude = step / 96 * Math.PI / 2;
+        const ringRadius = radius * Math.cos(latitude);
+        points.push(new THREE.Vector3(
+          ringRadius * Math.cos(longitude),
+          ringRadius * Math.sin(longitude),
+          radius * Math.sin(latitude)
+        ));
+      }
+      return new THREE.BufferGeometry().setFromPoints(points);
+    }
+
+    function earthSurfacePoint(latitudeDeg, longitudeDeg, radius = R_EARTH) {
+      const latitude = degToRad(latitudeDeg);
+      const longitude = degToRad(longitudeDeg);
+      const ringRadius = radius * Math.cos(latitude);
+      return new THREE.Vector3(
+        ringRadius * Math.cos(longitude),
+        ringRadius * Math.sin(longitude),
+        radius * Math.sin(latitude)
+      );
+    }
+
+    function earthSurfaceNorth(latitudeDeg, longitudeDeg) {
+      const latitude = degToRad(latitudeDeg);
+      const longitude = degToRad(longitudeDeg);
+      return new THREE.Vector3(
+        -Math.sin(latitude) * Math.cos(longitude),
+        -Math.sin(latitude) * Math.sin(longitude),
+        Math.cos(latitude)
+      ).normalize();
+    }
+
+    function moscowHomeDirection() {
+      return earthSurfacePoint(
+        MOSCOW_HOME.latitudeDeg,
+        MOSCOW_HOME.longitudeDeg,
+        1
+      ).normalize();
+    }
+
+    function moscowHomeUp() {
+      return earthSurfaceNorth(MOSCOW_HOME.latitudeDeg, MOSCOW_HOME.longitudeDeg);
+    }
+
+    function makeGroundMarker(label, latitudeDeg, longitudeDeg) {
+      const group = new THREE.Group();
+      const surfacePosition = earthSurfacePoint(latitudeDeg, longitudeDeg, R_EARTH * 1.006);
+      const normal = surfacePosition.clone().normalize();
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(R_EARTH * 0.012, R_EARTH * 0.032, 64),
+        new THREE.MeshBasicMaterial({
+          color: 0xfff7ed,
+          transparent: true,
+          opacity: 0.94,
+          side: THREE.DoubleSide,
+          depthTest: false,
+          depthWrite: false,
+          toneMapped: false
+        })
+      );
+      ring.position.copy(surfacePosition);
+      ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+      ring.renderOrder = 13;
+
+      const labelSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: makeGroundLabelTexture(label),
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false
+      }));
+      labelSprite.position.copy(earthSurfacePoint(latitudeDeg, longitudeDeg, R_EARTH * 1.16));
+      labelSprite.renderOrder = 15;
+
+      group.add(ring, labelSprite);
+      return { group, label: labelSprite };
+    }
+
+    function makeEarthAxes() {
+      const group = new THREE.Group();
+      const labels = [];
+      const origin = new THREE.Vector3(0, 0, 0);
+      const axisLength = R_EARTH * 1.08;
+      const axisHeadLength = R_EARTH * 0.065;
+      const axisHeadWidth = R_EARTH * 0.04;
+      const labelOffset = R_EARTH * 0.055;
+      const axes = [
+        { label: 'X', color: 0xf87171, direction: new THREE.Vector3(1, 0, 0) },
+        { label: 'Y', color: 0x4ade80, direction: new THREE.Vector3(0, 1, 0) },
+        { label: 'Z', color: 0x818cf8, direction: new THREE.Vector3(0, 0, 1) }
+      ];
+
+      for (const axis of axes) {
+        const arrow = new THREE.ArrowHelper(
+          axis.direction,
+          origin,
+          axisLength,
+          axis.color,
+          axisHeadLength,
+          axisHeadWidth
+        );
+        prepareAxisMaterial(arrow.line.material, 0.72);
+        prepareAxisMaterial(arrow.cone.material, 0.84);
+        arrow.line.renderOrder = 9;
+        arrow.cone.renderOrder = 10;
+        group.add(arrow);
+
+        const label = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: makeAxisLabelTexture(axis.label, axis.color),
+          transparent: true,
+          depthTest: false,
+          depthWrite: false,
+          toneMapped: false
+        }));
+        label.position.copy(axis.direction.clone().multiplyScalar(axisLength + labelOffset));
+        label.renderOrder = 12;
+        labels.push(label);
+        group.add(label);
+      }
+
+      const center = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: makeAxisLabelTexture('O', 0xffffff, true),
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false
+      }));
+      center.renderOrder = 11;
+      group.add(center);
+
+      return { group, labels, center };
+    }
+
+    function prepareAxisMaterial(material, opacity) {
+      material.transparent = true;
+      material.opacity = opacity;
+      material.depthTest = false;
+      material.depthWrite = false;
+      material.toneMapped = false;
+    }
+
+    function makeAxisLabelTexture(text, color, isCenter = false) {
+      const size = 128;
+      const center = size / 2;
+      const radius = isCenter ? 28 : 42;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext('2d');
+      const colorStyle = new THREE.Color(color).getStyle();
+
+      context.clearRect(0, 0, size, size);
+      context.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      context.shadowBlur = isCenter ? 6 : 12;
+      context.beginPath();
+      context.arc(center, center, radius + 7, 0, Math.PI * 2);
+      context.fillStyle = 'rgba(3, 7, 18, 0.78)';
+      context.fill();
+
+      context.shadowBlur = 0;
+      context.beginPath();
+      context.arc(center, center, radius, 0, Math.PI * 2);
+      context.fillStyle = isCenter ? 'rgba(248, 250, 252, 0.9)' : colorStyle;
+      context.fill();
+
+      context.lineWidth = isCenter ? 5 : 7;
+      context.strokeStyle = isCenter ? 'rgba(15, 23, 42, 0.95)' : 'rgba(248, 250, 252, 0.92)';
+      context.stroke();
+
+      context.fillStyle = isCenter ? '#0f172a' : '#06111f';
+      context.font = `${isCenter ? 36 : 50}px Arial, sans-serif`;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(text, center, center + (isCenter ? 1 : 2));
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.minFilter = THREE.LinearFilter;
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      return texture;
+    }
+
     function makeSatelliteMarkerTexture() {
       const size = 128;
       const center = size / 2;
@@ -1151,6 +1500,52 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
       return texture;
     }
 
+    function makeGroundLabelTexture(text) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 96;
+      const context = canvas.getContext('2d');
+
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.shadowColor = 'rgba(0, 0, 0, 0.55)';
+      context.shadowBlur = 12;
+      context.fillStyle = 'rgba(3, 7, 18, 0.82)';
+      roundRect(context, 16, 18, 224, 58, 24);
+      context.fill();
+      context.shadowBlur = 0;
+      context.strokeStyle = 'rgba(255, 247, 237, 0.92)';
+      context.lineWidth = 4;
+      roundRect(context, 16, 18, 224, 58, 24);
+      context.stroke();
+      context.fillStyle = '#fff7ed';
+      context.font = 'bold 34px "Segoe UI", Arial, sans-serif';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(text, canvas.width / 2, 47);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.minFilter = THREE.LinearFilter;
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      return texture;
+    }
+
+    function roundRect(context, x, y, width, height, radius) {
+      const r = Math.min(radius, width / 2, height / 2);
+      context.beginPath();
+      context.moveTo(x + r, y);
+      context.lineTo(x + width - r, y);
+      context.quadraticCurveTo(x + width, y, x + width, y + r);
+      context.lineTo(x + width, y + height - r);
+      context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+      context.lineTo(x + r, y + height);
+      context.quadraticCurveTo(x, y + height, x, y + height - r);
+      context.lineTo(x, y + r);
+      context.quadraticCurveTo(x, y, x + r, y);
+      context.closePath();
+    }
+
     function updateSatelliteMarkerScale() {
       if (!history.length) return;
       const distance = camera.position.distanceTo(satellite.position);
@@ -1159,6 +1554,43 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
       const worldUnitsPerPixel = 2 * distance * Math.tan(fovRadians / 2) / canvasHeight;
       const markerSize = clamp(worldUnitsPerPixel * 30, 420, 3600);
       satellite.scale.set(markerSize, markerSize, 1);
+    }
+
+    function updateAxisMarkerScale() {
+      const canvasHeight = Math.max(1, renderer.domElement.clientHeight);
+      const fovRadians = THREE.MathUtils.degToRad(camera.fov);
+      for (const sprite of axisLabelSprites) {
+        const distance = camera.position.distanceTo(sprite.position);
+        const worldUnitsPerPixel = 2 * distance * Math.tan(fovRadians / 2) / canvasHeight;
+        const markerSize = clamp(worldUnitsPerPixel * 24, 260, 2600);
+        sprite.scale.set(markerSize, markerSize, 1);
+      }
+      const centerDistance = camera.position.distanceTo(axisCenterSprite.position);
+      const centerUnitsPerPixel = 2 * centerDistance * Math.tan(fovRadians / 2) / canvasHeight;
+      const centerSize = clamp(centerUnitsPerPixel * 18, 180, 1900);
+      axisCenterSprite.scale.set(centerSize, centerSize, 1);
+
+      const labelDistance = camera.position.distanceTo(moscowHomeMarker.label.position);
+      const labelUnitsPerPixel = 2 * labelDistance * Math.tan(fovRadians / 2) / canvasHeight;
+      const labelHeight = clamp(labelUnitsPerPixel * 28, 320, 1700);
+      moscowHomeMarker.label.scale.set(labelHeight * 2.65, labelHeight, 1);
+    }
+
+    function setPositionVectorLine(position) {
+      const positions = positionVectorLine.geometry.getAttribute('position');
+      if (!positions) {
+        positionVectorLine.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+        positionVectorLine.geometry.setDrawRange(0, 2);
+      }
+      const array = positionVectorLine.geometry.getAttribute('position').array;
+      array[0] = 0;
+      array[1] = 0;
+      array[2] = 0;
+      array[3] = position.x;
+      array[4] = position.y;
+      array[5] = position.z;
+      positionVectorLine.geometry.getAttribute('position').needsUpdate = true;
+      positionVectorLine.geometry.computeBoundingSphere();
     }
 
     function setLinePoints(line, points) {
@@ -1220,24 +1652,45 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
 
     function fitCameraToTrajectory(points) {
       if (!points.length) return;
-      const maxAbs = points.reduce((maxValue, point) => Math.max(maxValue, Math.abs(point.x), Math.abs(point.y), Math.abs(point.z)), R_EARTH);
-      viewDistance = maxAbs * 2.55;
-      camera.near = Math.max(1, viewDistance / 10000);
-      camera.far = viewDistance * 12;
+      const maxRadius = points.reduce((maxValue, point) => Math.max(maxValue, point.length()), R_EARTH);
+      const fovRadians = THREE.MathUtils.degToRad(camera.fov);
+      viewDistance = Math.max(R_EARTH * 3.0, maxRadius / Math.sin(fovRadians / 2) * 1.08);
+      camera.near = Math.max(1, viewDistance / 12000);
+      camera.far = viewDistance * 10;
       camera.updateProjectionMatrix();
-      controls.target.set(0, 0, 0);
+      updateControlLimits(maxRadius);
+      controls.target.copy(followSatellite ? satellite.position : new THREE.Vector3(0, 0, 0));
       if (!controls.userData?.userMoved) {
-        camera.position.set(viewDistance * 0.62, -viewDistance * 0.74, viewDistance * 0.48);
+        const target = controls.target.clone();
+        const direction = followSatellite
+          ? new THREE.Vector3(0.62, -0.74, 0.48).normalize()
+          : moscowHomeDirection();
+        const up = followSatellite ? new THREE.Vector3(0, 0, 1) : moscowHomeUp();
+        camera.position.copy(target).add(direction.clone().multiplyScalar(viewDistance));
+        camera.up.copy(safeCameraUp(direction, up));
+        camera.lookAt(target);
       }
       updateControlsFromCode();
     }
+
+    function updateControlLimits(maxRadius) {
+      controls.cursor.set(0, 0, 0);
+      controls.minDistance = followSatellite ? Math.max(350, R_EARTH * 0.08) : R_EARTH * 1.08;
+      controls.maxDistance = Math.max(viewDistance * 4.5, maxRadius * 3.0, R_EARTH * 8);
+      controls.maxTargetRadius = followSatellite ? Infinity : Math.max(R_EARTH * 0.35, maxRadius * 0.32);
+    }
+
     controls.addEventListener('change', () => {
       if (!syncingCamera) {
         controls.userData = { userMoved: true };
+        setActiveView(null);
       }
     });
 
     function alignView(mode) {
+      if (followSatellite) {
+        setFollowSatellite(false);
+      }
       setActiveView(mode);
       if (mode === 'general') {
         controls.userData = { userMoved: false };
@@ -1282,7 +1735,9 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
       for (const button of Object.values(activeByMode)) {
         button.classList.remove('active');
       }
-      activeByMode[mode]?.classList.add('active');
+      if (mode) {
+        activeByMode[mode]?.classList.add('active');
+      }
     }
 
     function setCameraView(direction, up) {
@@ -1324,13 +1779,73 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
       syncingCamera = false;
     }
 
+    function setFollowSatellite(enabled) {
+      followSatellite = Boolean(enabled && history.length);
+      el.viewFollow.classList.toggle('following', followSatellite);
+      el.viewFollow.setAttribute('aria-pressed', String(followSatellite));
+      updateControlLimits(Math.max(R_EARTH, ...renderPositions.map((point) => point.length())));
+
+      if (followSatellite) {
+        const delta = satellite.position.clone().sub(controls.target);
+        controls.target.copy(satellite.position);
+        camera.position.add(delta);
+        controls.userData = { userMoved: true };
+        setActiveView(null);
+      } else {
+        controls.target.set(0, 0, 0);
+      }
+      updateControlsFromCode();
+    }
+
+    function updateFollowTarget() {
+      if (!followSatellite) return;
+      const delta = satellite.position.clone().sub(controls.target);
+      if (delta.lengthSq() <= 1e-12) return;
+      controls.target.copy(satellite.position);
+      camera.position.add(delta);
+      updateControlsFromCode();
+    }
+
+    function updateViewCompass() {
+      const inverseCamera = camera.quaternion.clone().invert();
+      const axes = [
+        { element: compassAxes.x, vector: new THREE.Vector3(1, 0, 0) },
+        { element: compassAxes.y, vector: new THREE.Vector3(0, 1, 0) },
+        { element: compassAxes.z, vector: new THREE.Vector3(0, 0, 1) }
+      ];
+
+      for (const axis of axes) {
+        const viewAxis = axis.vector.applyQuaternion(inverseCamera);
+        const screenX = viewAxis.x;
+        const screenY = -viewAxis.y;
+        const screenLength = clamp(Math.hypot(screenX, screenY), 0.18, 1.0) * 24;
+        const angle = Math.atan2(screenX, screenY);
+        axis.element.style.height = `${screenLength}px`;
+        axis.element.style.opacity = String(viewAxis.z > 0 ? 0.42 : 0.92);
+        axis.element.style.transform = `rotate(${angle}rad)`;
+      }
+    }
+
+    function zoomView(scale) {
+      const offset = camera.position.clone().sub(controls.target);
+      const nextDistance = clamp(offset.length() * scale, controls.minDistance, controls.maxDistance);
+      offset.setLength(nextDistance);
+      camera.position.copy(controls.target).add(offset);
+      controls.userData = { userMoved: true };
+      setActiveView(null);
+      updateControlsFromCode();
+      updateSatelliteMarkerScale();
+    }
+
     function resizeRenderer() {
-      const width = el.scene.clientWidth;
-      const height = el.scene.clientHeight;
+      const width = Math.max(1, el.scene.clientWidth);
+      const height = Math.max(1, el.scene.clientHeight);
       renderer.setSize(width, height);
       camera.aspect = sceneAspect();
       camera.updateProjectionMatrix();
       updateSatelliteMarkerScale();
+      updateAxisMarkerScale();
+      updateViewCompass();
     }
 
     function sceneAspect() {

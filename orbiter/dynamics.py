@@ -23,6 +23,12 @@ J2_REFERENCE_RADIUS = 6378.1363
 DEFAULT_RADIUS = 7000.0
 DEFAULT_SPEED = float(np.sqrt(MU / DEFAULT_RADIUS))
 MAX_STEPS = 200_000
+MOSCOW_LATITUDE_DEG = 55.7558
+MOSCOW_LONGITUDE_DEG = 37.6173
+EARTH_HOME_POINT = (
+    f"Москва: {MOSCOW_LATITUDE_DEG:.4f} deg N, {MOSCOW_LONGITUDE_DEG:.4f} deg E. "
+    "Static spherical Earth visual reference."
+)
 
 
 @dataclass
@@ -99,6 +105,31 @@ class OrbitPreset:
             f"высота = {perigee_alt:.0f}-{apogee_alt:.0f} км\n"
             f"dt = {self.dt:g} с, расчет = {self.duration_min:g} мин"
         )
+
+
+def geodetic_surface_point(
+    latitude_deg: float,
+    longitude_deg: float,
+    radius: float = R_EARTH,
+) -> np.ndarray:
+    """Spherical Earth surface point in the project Cartesian frame.
+
+    Frame: geocentric inertial Cartesian visualization frame with +Z north.
+    Time scale: static visual reference, no UTC/TT/TDB and no Earth rotation.
+    Units: latitude/longitude in degrees, radius and returned position in km.
+    Force model: not applicable; this is a coordinate helper for rendering.
+    """
+    latitude = np.radians(latitude_deg)
+    longitude = np.radians(longitude_deg)
+    ring_radius = radius * np.cos(latitude)
+    return np.array(
+        [
+            ring_radius * np.cos(longitude),
+            ring_radius * np.sin(longitude),
+            radius * np.sin(latitude),
+        ],
+        dtype=float,
+    )
 
 
 def orbital_elements_to_state(
@@ -266,6 +297,7 @@ def orbital_summary(
         f"Time scale: {TIME_SCALE}",
         f"Units: {UNITS}",
         f"Force model: {FORCE_MODEL_LABELS.get(force_model, force_model)}",
+        f"Earth home: {EARTH_HOME_POINT}",
         "",
         f"Высота старта: {altitude:.1f} км",
         f"Скорость старта: {speed:.3f} км/с",
