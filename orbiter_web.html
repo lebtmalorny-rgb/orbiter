@@ -1214,7 +1214,7 @@
       playing = true;
       el.dt.value = formatNumber(stepSeconds);
       el.preset.value = 'Пользовательская';
-      el['preset-info'].textContent = 'Траектория получена из GP/OMM и распространена SGP4.';
+      el['preset-info'].textContent = 'SGP4/UTC из CelesTrak GP/OMM. Это не тот же расчет, что учебная RK4-орбита по умолчанию.';
       el.realtimeInfo.textContent = realtimeInfoText(payload, samples[frameIndex]);
       updateSceneObjects(false, { preserveCamera: Boolean(options.preserveCamera) });
       updateSummary(false);
@@ -1593,6 +1593,9 @@
         `Force model: ${metadata.force_model || 'SGP4 general perturbations.'}`,
         `Input: ${modelProfile.input_frame || parameters.ref_frame || 'TEME'} / ${modelProfile.input_time_system || parameters.time_system || 'UTC'} / ${modelProfile.mean_element_theory || parameters.mean_element_theory || 'SGP4'}`,
         `Earth home: ${EARTH_HOME_POINT}`,
+        '',
+        'Real-time display: satellite position is interpolated between SGP4 UTC samples for smooth rendering.',
+        'RK4 presets are educational local trajectories and are not expected to match GP/OMM SGP4 motion.',
         '',
         `Спутник: ${satelliteData.name || 'не указан'} / NORAD ${satelliteData.norad_cat_id || '-'}`,
         `Каталог: ${catalogSatellite.label || 'ручной поиск'}`,
