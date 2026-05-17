@@ -1,134 +1,138 @@
-# Real-Time Accuracy And Orbit Display Design
+# Дизайн улучшения точности отображения real-time орбит
 
-Date: 2026-05-17
+Дата: 2026-05-17
 
-## Goal
+## Цель
 
-Improve the current real-time satellite experience with a small corrective pass,
-without a broad architecture rewrite. The app should make SGP4/UTC motion look
-smoother, make orbit/trail rendering easier to read, and clearly explain why the
-manual RK4 default orbit does not match a real-time CelesTrak/SGP4 satellite.
+Улучшить текущий real-time режим малым корректирующим проходом, без большого
+архитектурного переписывания. Приложение должно плавнее показывать движение
+SGP4/UTC, понятнее рисовать орбиту и след, а также честно объяснять, почему
+ручная RK4-орбита по умолчанию не совпадает с real-time траекторией из
+CelesTrak/SGP4.
 
-## Current Root Cause
+## Текущая причина расхождения
 
-The mismatch between the default/manual orbit and real-time orbit is expected.
-They are not two versions of the same calculation:
+Расхождение между ручной/default орбитой и real-time орбитой ожидаемо. Это не
+две версии одного расчета:
 
-- Manual/default mode uses approximate local presets and browser RK4.
-- Real-time mode uses CelesTrak GP/OMM mean elements and Skyfield SGP4.
-- Manual mode uses elapsed simulation time; real-time mode uses wall-clock UTC.
-- Manual mode is drawn in the app's static geocentric visual frame; real-time
-  mode currently draws `visual_position_km`, projected from WGS84
-  latitude/longitude/height onto the app's static spherical Earth.
+- Ручной/default режим использует приближенные локальные пресеты и браузерный
+  RK4.
+- Real-time режим использует средние элементы CelesTrak GP/OMM и Skyfield SGP4.
+- Ручной режим использует относительное модельное время; real-time режим
+  использует wall-clock UTC.
+- Ручной режим рисуется в статичной геоцентрической визуальной системе
+  приложения; real-time режим сейчас рисует `visual_position_km`, полученную
+  проекцией WGS84 latitude/longitude/height на статичную сферическую Землю
+  приложения.
 
-This design improves clarity and rendering quality without pretending that the
-manual RK4 presets can reproduce SGP4 by changing `MU`, `J2`, or radius
-constants.
+Этот дизайн улучшает ясность и качество отображения, но не делает вид, что
+ручные RK4-пресеты можно привести к SGP4 заменой `MU`, `J2` или радиусов.
 
-## Scope
+## Границы работ
 
-In scope:
+Входит в этот проход:
 
-- Keep `third.py`, `orbiter/realtime.py`, and `orbiter_web.html` as the main
-  runtime structure.
-- Keep Skyfield SGP4 as the source of truth for real-time mode.
-- Smooth real-time animation by interpolating between UTC samples instead of
-  snapping to the nearest sample.
-- Improve orbit/trail rendering so the current motion direction and recent
-  track are visually clearer.
-- Update UI/README text so users understand the frame, time scale, units, and
-  force model boundary.
-- Add focused tests where Python API behavior or documented boundaries change.
+- Оставить `third.py`, `orbiter/realtime.py` и `orbiter_web.html` основной
+  структурой запуска.
+- Оставить Skyfield SGP4 источником истины для real-time режима.
+- Сгладить real-time анимацию интерполяцией между UTC-сэмплами вместо
+  привязки к ближайшему сэмплу.
+- Улучшить отрисовку орбиты/следа, чтобы текущее направление движения и
+  недавняя траектория читались яснее.
+- Обновить текст в UI/README, чтобы пользователь видел границы frame, time
+  scale, units и force model.
+- Добавить точечные тесты, если изменится Python API или документированные
+  границы поведения.
 
-Out of scope for this pass:
+Не входит в этот проход:
 
-- Moving satellite descriptions and orbit presets into a new Python module.
-- Replacing the static spherical Earth with full WGS84/ITRF rendering.
-- Adding Astropy/Cesium/satellite.js or browser worker propagation.
-- Making manual RK4 match SGP4 from mean elements.
-- Downloading CelesTrak data more frequently than the existing cache policy.
+- Вынос описаний спутников и орбитальных пресетов в новый Python-модуль.
+- Замена статичной сферической Земли полноценным WGS84/ITRF-режимом.
+- Добавление Astropy/Cesium/satellite.js или propagation в browser worker.
+- Попытка сделать ручной RK4 совпадающим с SGP4 mean elements.
+- Более частая загрузка данных CelesTrak, чем допускает текущая cache policy.
 
-## Architecture
+## Архитектура
 
-Real-time propagation stays server-side:
+Real-time propagation остается на серверной стороне:
 
-1. Browser asks `third.py` for `/api/realtime/trajectory`.
-2. `orbiter.realtime` loads CelesTrak GP/OMM JSON with the existing 2-hour cache.
-3. Skyfield `EarthSatellite.from_omm` propagates samples using SGP4.
-4. The API returns sample UTC, GCRS position/velocity, WGS84-derived
-   latitude/longitude/height, `visual_position_km`, model metadata, and OMM
-   element metadata.
-5. Browser renders the returned trajectory and animates the current satellite
-   position against wall-clock UTC.
+1. Браузер запрашивает у `third.py` `/api/realtime/trajectory`.
+2. `orbiter.realtime` загружает CelesTrak GP/OMM JSON с текущим 2-часовым
+   кэшем.
+3. Skyfield `EarthSatellite.from_omm` распространяет сэмплы через SGP4.
+4. API возвращает UTC сэмпла, GCRS position/velocity, WGS84-derived
+   latitude/longitude/height, `visual_position_km`, metadata модели и metadata
+   OMM elements.
+5. Браузер рисует полученную траекторию и анимирует текущее положение спутника
+   относительно wall-clock UTC.
 
-The browser should treat real-time samples as a time series. It should compute a
-continuous visual state for the current UTC by interpolating position and
-velocity between neighboring samples. If the current UTC is outside the returned
-window, it should clamp to the first or last sample and keep the existing stale
-epoch warnings.
+Браузер должен воспринимать real-time сэмплы как временной ряд. Для текущего
+UTC он вычисляет непрерывное визуальное состояние интерполяцией position и
+velocity между соседними сэмплами. Если текущий UTC выходит за пределы
+возвращенного окна, браузер зажимает состояние к первому или последнему сэмплу
+и сохраняет существующие предупреждения о stale epoch.
 
-## UI And Rendering
+## UI и отрисовка
 
-Real-time animation:
+Real-time анимация:
 
-- Replace nearest-sample frame selection with a real-time interpolation cursor.
-- Keep `frameIndex` as the nearest sample index for panels that display OMM or
-  sample metadata.
-- Use interpolated position for the satellite mesh and radius vector.
-- Use interpolated velocity magnitude for the HUD when available.
+- Заменить выбор ближайшего сэмпла на real-time interpolation cursor.
+- Оставить `frameIndex` как ближайший индекс сэмпла для панелей OMM/sample
+  metadata.
+- Использовать интерполированную position для mesh спутника и радиус-вектора.
+- Использовать интерполированную скорость в HUD, когда она доступна.
 
-Orbit display:
+Отрисовка орбиты:
 
-- Keep the existing full orbit line.
-- Keep the trail line but base its range on the real-time UTC cursor, not only
-  on sample index snapping.
-- Make the current/recent trail visually stronger than the full orbit line.
-- Preserve the existing "always visible" depth mode.
+- Оставить текущую полную линию орбиты.
+- Оставить линию следа, но привязать ее range к real-time UTC cursor, а не
+  только к скачущему sample index.
+- Сделать текущий/недавний след визуально сильнее полной линии орбиты.
+- Сохранить существующий режим "always visible" для depth mode.
 
-Explanatory text:
+Поясняющий текст:
 
-- When real-time mode loads, the preset info and summary should state that the
-  trajectory is SGP4/UTC from GP/OMM and is not comparable to the educational
-  RK4 preset unless both are seeded from the same state and model assumptions.
-- README should retain the boundary: local `R_EARTH`, `MU`, `J2`, and
-  `J2_REFERENCE_RADIUS` describe the educational/static-sphere model and do not
-  control Skyfield/SGP4.
+- При загрузке real-time режима блок preset info и summary должны говорить, что
+  траектория получена SGP4/UTC из GP/OMM и не сравнима с учебным RK4-пресетом,
+  если оба режима не запущены от одного и того же state и согласованных model
+  assumptions.
+- README должен сохранять границу: локальные `R_EARTH`, `MU`, `J2` и
+  `J2_REFERENCE_RADIUS` описывают educational/static-sphere модель и не
+  управляют Skyfield/SGP4.
 
-## Error Handling
+## Обработка ошибок
 
-- If interpolation cannot find valid neighboring samples, fall back to the
-  nearest valid sample instead of stopping animation.
-- If samples are malformed, keep the current load error path.
-- If current wall-clock UTC is outside the sampled window, clamp to the nearest
-  endpoint and keep the trajectory visible.
-- Do not change the CelesTrak network retry or persistent backoff behavior in
-  this pass.
+- Если интерполяция не может найти валидные соседние сэмплы, использовать
+  ближайший валидный сэмпл и не останавливать анимацию.
+- Если сэмплы имеют некорректный формат, оставить текущий путь ошибки загрузки.
+- Если текущий wall-clock UTC вне sampled window, зажать положение к ближайшему
+  краю и оставить траекторию видимой.
+- Не менять в этом проходе сетевые retries CelesTrak и persistent backoff.
 
-## Testing
+## Проверка
 
-Verification should include:
+Нужно выполнить:
 
 - `venv\Scripts\python.exe -m ruff check .`
 - `venv\Scripts\python.exe -m pytest`
-- Browser verification after starting `venv\Scripts\python.exe third.py
+- Браузерная проверка после запуска `venv\Scripts\python.exe third.py
   --no-browser --port <free-port>`:
-  - page loads without console errors;
-  - Earth/WebGL scene is nonblank;
-  - real-time trajectory renders;
-  - real-time satellite motion is smooth between samples;
-  - desktop and mobile layouts do not overlap.
+  - страница открывается без console errors;
+  - Earth/WebGL сцена не пустая;
+  - real-time траектория рисуется;
+  - real-time движение спутника плавное между сэмплами;
+  - desktop и mobile layouts не перекрываются.
 
-If only browser JavaScript changes are made, pytest still runs to confirm the
-Python reference and SGP4 API stayed stable.
+Если меняется только браузерный JavaScript, pytest все равно запускается, чтобы
+подтвердить стабильность Python reference и SGP4 API.
 
-## Acceptance Criteria
+## Критерии приемки
 
-- Real-time satellite motion no longer jumps sample-to-sample during normal
-  playback.
-- The full orbit, recent trail, satellite marker, HUD, and NORAD panel remain
-  consistent while real-time mode is playing.
-- The app clearly distinguishes educational RK4/manual mode from real-time
-  SGP4/UTC mode.
-- Existing cache behavior, explicit `FORMAT=JSON`, and stale cache fallback are
-  preserved.
-- Ruff and pytest pass.
+- Real-time спутник больше не прыгает от сэмпла к сэмплу при обычном playback.
+- Полная орбита, недавний след, satellite marker, HUD и NORAD panel остаются
+  согласованными во время real-time режима.
+- Приложение явно отличает educational RK4/manual mode от real-time SGP4/UTC
+  mode.
+- Существующее cache behavior, явный `FORMAT=JSON` и stale cache fallback
+  сохранены.
+- Ruff и pytest проходят.
