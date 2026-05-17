@@ -464,7 +464,7 @@
           <option value="twoBody">2 тела</option>
           <option value="j2">J2</option>
         </select></label>
-        <label>Поверх Земли <input id="alwaysVisible" type="checkbox" checked></label>
+        <label>Поверх Земли <input id="alwaysVisible" type="checkbox"></label>
       </fieldset>
 
       <div class="button-row">
@@ -520,6 +520,10 @@
             <input id="showRadiusVector" type="checkbox">
             <span>R</span>
           </label>
+          <label class="plane-switch" title="Показать NORAD/OMM на сцене">
+            <input id="showNoradPanel" type="checkbox">
+            <span>OMM</span>
+          </label>
         </div>
       </nav>
       <div id="error"></div>
@@ -547,6 +551,7 @@
     const MAX_STEPS = 200000;
     const MAX_RENDER_POINTS = 12000;
     const TRAIL_WINDOW_MIN = 35.0;
+    const REALTIME_ORBIT_PERIOD_FALLBACK_MIN = 100.0;
     const REALTIME_REFRESH_MS = 5 * 60 * 1000;
     const EARTH_OBLIQUITY_DEG = 23.439281;
     const MOSCOW_HOME = Object.freeze({
@@ -688,7 +693,7 @@
       'realtimeGroup', 'realtimeSatellite', 'realtimeQuery', 'loadRealtime', 'realtimeInfo',
       'raanDeg', 'argPerigeeDeg', 'trueAnomalyDeg', 'x0', 'y0', 'z0',
       'vx0', 'vy0', 'vz0', 'speed', 'dt', 'durationMin', 'animationRate', 'forceModel',
-      'alwaysVisible', 'run', 'stop', 'reset', 'applyOrbit', 'applySpeed',
+      'alwaysVisible', 'showNoradPanel', 'run', 'stop', 'reset', 'applyOrbit', 'applySpeed',
       'viewGeneral', 'viewEquator', 'viewFront', 'viewRight', 'viewZoomIn', 'viewZoomOut',
       'viewFollow', 'viewEcliptic', 'viewOrbit',
       'showEquatorPlane', 'showEclipticPlane', 'showAxes', 'showRadiusVector',
@@ -856,6 +861,7 @@
       el[id].addEventListener('input', updateSpeedFromProjections);
     }
     el.alwaysVisible.addEventListener('change', updateDepthMode);
+    el.showNoradPanel.addEventListener('change', updateNoradPanel);
     for (const id of ['showEquatorPlane', 'showEclipticPlane', 'showAxes', 'showRadiusVector']) {
       el[id].addEventListener('change', updateLayerVisibility);
     }
@@ -1278,11 +1284,11 @@
     function updateDepthMode() {
       const alwaysVisible = el.alwaysVisible.checked;
       orbitLine.visible = !alwaysVisible;
-      orbitLine.material.depthTest = false;
+      orbitLine.material.depthTest = !alwaysVisible;
       orbitLine.material.depthWrite = false;
       orbitLine.material.transparent = true;
-      orbitLine.material.opacity = 0.12;
-      orbitLine.renderOrder = 4;
+      orbitLine.material.opacity = alwaysVisible ? 0.12 : 0.22;
+      orbitLine.renderOrder = alwaysVisible ? 8 : 4;
 
       for (const line of [orbitLineVisible, trailLine, positionVectorLine]) {
         line.material.depthTest = !alwaysVisible;
@@ -1315,6 +1321,9 @@
 
     function updateTrail() {
       if (!history.length || !renderPositions.length) return;
+      const orbitRange = orbitDrawRange();
+      orbitLine.geometry.setDrawRange(orbitRange.start, orbitRange.count);
+      orbitLineVisible.geometry.setDrawRange(orbitRange.start, orbitRange.count);
       const range = trailDrawRange();
       trailLine.geometry.setDrawRange(range.start, range.count);
     }
@@ -1348,6 +1357,12 @@
     }
 
     function updateNoradPanel() {
+      if (!el.showNoradPanel.checked) {
+        el.noradPanel.textContent = '';
+        el.noradPanel.style.display = 'none';
+        return;
+      }
+
       if (activeTrajectory.type !== 'realtime') {
         el.noradPanel.textContent = '';
         el.noradPanel.style.display = 'none';
@@ -2203,6 +2218,41 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
       const trailSamples = Math.max(1, Math.ceil(TRAIL_WINDOW_MIN * 60 / dt / renderStride));
       const start = Math.max(0, current - trailSamples);
       return { start, count: Math.max(1, current - start + 1) };
+    }
+
+    function orbitDrawRange() {
+      if (activeTrajectory.type === 'realtime') {
+        return realtimeOrbitDrawRange();
+      }
+      return { start: 0, count: renderPositions.length };
+    }
+
+    function realtimeOrbitDrawRange() {
+      if (!renderPositions.length) {
+        return { start: 0, count: 0 };
+      }
+
+      const periodMin = Number(activeTrajectory.elementParameters?.period_min);
+      const periodSeconds = (
+        Number.isFinite(periodMin) && periodMin > 0
+          ? periodMin
+          : REALTIME_ORBIT_PERIOD_FALLBACK_MIN
+      ) * 60;
+      const sourceStepSeconds = realtimeSampleStepSeconds();
+      const renderSamples = Math.max(1, Math.ceil(periodSeconds / sourceStepSeconds / renderStride));
+      const halfWindow = Math.max(1, Math.ceil(renderSamples / 2));
+      const current = currentRenderPointIndex();
+      const start = Math.max(0, current - halfWindow);
+      const end = Math.min(renderPositions.length - 1, current + halfWindow);
+      return { start, count: Math.max(1, end - start + 1) };
+    }
+
+    function realtimeSampleStepSeconds() {
+      if (sampleUtcTimes.length < 2) {
+        return Math.max(1e-9, readNumberOrDefault('dt', 1));
+      }
+      const spanMs = sampleUtcTimes[sampleUtcTimes.length - 1] - sampleUtcTimes[0];
+      return Math.max(1e-9, spanMs / (sampleUtcTimes.length - 1) / 1000);
     }
 
     function realtimeRenderSourceIndex() {
