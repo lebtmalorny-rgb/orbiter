@@ -1043,6 +1043,8 @@
         const result = simulateOrbit(config);
         activeTrajectory = { type: 'model' };
         sampleUtcTimes = [];
+        activeVisualState = null;
+        realtimeCursorUtcMs = null;
         updateNoradPanel();
         history = result.history;
         times = result.times;
@@ -1205,7 +1207,9 @@
       times = nextTimes;
       sampleUtcTimes = nextSampleUtcTimes;
       speeds = history.map((state) => norm(state.slice(3, 6)));
-      frameIndex = nearestSampleIndex(Date.now());
+      realtimeCursorUtcMs = Date.now();
+      frameIndex = nearestSampleIndex(realtimeCursorUtcMs);
+      activeVisualState = interpolatedRealtimeState(realtimeCursorUtcMs);
       simulationClock = times[frameIndex] || 0;
       playing = true;
       el.dt.value = formatNumber(stepSeconds);
@@ -1222,6 +1226,10 @@
       playing = false;
       frameIndex = 0;
       simulationClock = 0;
+      realtimeCursorUtcMs = sampleUtcTimes[0] || null;
+      activeVisualState = activeTrajectory.type === 'realtime'
+        ? interpolatedRealtimeState(realtimeCursorUtcMs || Date.now())
+        : null;
       updateTrail();
       updateSatellite();
       updateHud();
@@ -1313,8 +1321,12 @@
 
     function updateSatellite() {
       if (!history.length) return;
-      const state = history[frameIndex];
-      const position = new THREE.Vector3(state[0], state[1], state[2]);
+      const visualState = currentVisualState();
+      const position = new THREE.Vector3(
+        visualState.position[0],
+        visualState.position[1],
+        visualState.position[2]
+      );
       satellite.position.copy(position);
       setPositionVectorLine(position);
       updateSatelliteMarkerScale();
@@ -1326,11 +1338,12 @@
         updateNoradPanel();
         return;
       }
-      const altitude = norm(history[frameIndex].slice(0, 3)) - R_EARTH;
-      const timeLabel = activeTrajectory.type === 'realtime' && sampleUtcTimes[frameIndex]
-        ? `UTC = ${formatUtc(sampleUtcTimes[frameIndex])}`
+      const visualState = currentVisualState();
+      const altitude = norm(visualState.position) - R_EARTH;
+      const timeLabel = activeTrajectory.type === 'realtime' && visualState.utcMs
+        ? `UTC = ${formatUtc(visualState.utcMs)}`
         : `t = ${(times[frameIndex] / 60).toFixed(1)} мин`;
-      el.hud.innerHTML = `${timeLabel}<br>h = ${altitude.toFixed(1)} км<br>V = ${speeds[frameIndex].toFixed(3)} км/с`;
+      el.hud.innerHTML = `${timeLabel}<br>h = ${altitude.toFixed(1)} км<br>V = ${visualState.speed.toFixed(3)} км/с`;
       updateNoradPanel();
     }
 
@@ -1342,7 +1355,7 @@
       }
 
       const parameters = activeTrajectory.elementParameters || {};
-      const sample = activeTrajectory.samples?.[frameIndex] || activeTrajectory.samples?.[0] || {};
+      const sample = currentVisualState().sample || activeTrajectory.samples?.[0] || {};
       const satelliteData = activeTrajectory.satellite || {};
       const lines = [
         'NORAD / OMM',
@@ -1427,14 +1440,21 @@
       updateViewCompass();
 
       if (playing && history.length > 1) {
-        const nextIndex = activeTrajectory.type === 'realtime' && sampleUtcTimes.length
-          ? nearestSampleIndex(Date.now())
-          : nextModelFrameIndex(deltaMs);
-        if (nextIndex !== frameIndex) {
-          frameIndex = nextIndex;
+        if (activeTrajectory.type === 'realtime' && sampleUtcTimes.length) {
+          realtimeCursorUtcMs = Date.now();
+          activeVisualState = interpolatedRealtimeState(realtimeCursorUtcMs);
+          frameIndex = activeVisualState.index;
           updateTrail();
           updateSatellite();
           updateHud();
+        } else {
+          const nextIndex = nextModelFrameIndex(deltaMs);
+          if (nextIndex !== frameIndex) {
+            frameIndex = nextIndex;
+            updateTrail();
+            updateSatellite();
+            updateHud();
+          }
         }
       }
 
@@ -2183,10 +2203,13 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
     }
 
     function currentRenderPointIndex() {
-      if (frameIndex >= history.length - 1) {
+      const sourceIndex = activeTrajectory.type === 'realtime' && activeVisualState
+        ? activeVisualState.index
+        : frameIndex;
+      if (sourceIndex >= history.length - 1) {
         return Math.max(0, renderPositions.length - 1);
       }
-      return Math.min(renderPositions.length - 1, Math.max(0, Math.floor(frameIndex / renderStride)));
+      return Math.min(renderPositions.length - 1, Math.max(0, Math.floor(sourceIndex / renderStride)));
     }
 
     function circleGeometry(radius, segments, plane) {
