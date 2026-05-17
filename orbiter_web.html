@@ -2205,9 +2205,15 @@ dt = ${formatCompact(preset.dt)} с, расчет = ${formatCompact(preset.durat
       return { start, count: Math.max(1, current - start + 1) };
     }
 
+    function realtimeRenderSourceIndex() {
+      const targetUtcMs = activeVisualState?.utcMs || realtimeCursorUtcMs || Date.now();
+      const segment = realtimeSegment(targetUtcMs);
+      return segment.before + segment.ratio * (segment.after - segment.before);
+    }
+
     function currentRenderPointIndex() {
-      const sourceIndex = activeTrajectory.type === 'realtime' && activeVisualState
-        ? activeVisualState.index
+      const sourceIndex = activeTrajectory.type === 'realtime'
+        ? realtimeRenderSourceIndex()
         : frameIndex;
       if (sourceIndex >= history.length - 1) {
         return Math.max(0, renderPositions.length - 1);
