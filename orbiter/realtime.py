@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 from skyfield.api import EarthSatellite, load, wgs84
 
 from .dynamics import R_EARTH, geodetic_surface_point
+from .trajectory import build_trajectory_contract
 
 CELESTRAK_GP_URL = "https://celestrak.org/NORAD/elements/gp.php"
 DEFAULT_CELESTRAK_GROUP = "STATIONS"
@@ -50,6 +51,10 @@ SGP4_UNITS = (
     "GCRS position and visual position: km; velocity: km/s; geodetic latitude/longitude: degrees."
 )
 SGP4_FORCE_MODEL = "SGP4 general perturbations from GP/OMM mean elements."
+SGP4_ORBIT_FRAME = "GCRS"
+SGP4_GROUND_TRACK_FRAME = (
+    "WGS84 geodetic projected onto the static spherical Earth"
+)
 
 UrlOpen = Callable[[Request], object]
 
@@ -416,6 +421,61 @@ def trajectory_model_profile(element: OmmElementSet) -> dict[str, object]:
     }
 
 
+def _realtime_trajectory_contract(
+    element: OmmElementSet,
+    samples: list[RealtimeSatelliteState],
+) -> dict[str, object]:
+    return build_trajectory_contract(
+        trajectory_id=f"norad:{element.norad_cat_id}",
+        name=element.name,
+        kind="sgp4",
+        source=element.source or "CelesTrak GP/OMM",
+        time={
+            "scale": "UTC",
+            "sample_field": "time_utc",
+            "start_utc": samples[0].sample_utc.isoformat(),
+            "end_utc": samples[-1].sample_utc.isoformat(),
+        },
+        model={
+            "force_model": SGP4_FORCE_MODEL,
+            "element_epoch_utc": element.epoch_utc.isoformat(),
+        },
+        coordinate_sets={
+            "orbit": {
+                "frame": SGP4_ORBIT_FRAME,
+                "position_unit": "km",
+                "velocity_unit": "km/s",
+            },
+            "ground_track": {
+                "frame": SGP4_GROUND_TRACK_FRAME,
+                "angle_unit": "degrees",
+                "altitude_unit": "km",
+                "visual_position_unit": "km",
+            },
+        },
+        samples=[
+            {
+                "time_utc": sample.sample_utc.isoformat(),
+                "orbit": {
+                    "position_km": list(sample.gcrs_position_km),
+                    "velocity_km_s": list(sample.gcrs_velocity_km_s),
+                },
+                "ground_track": {
+                    "latitude_deg": sample.latitude_deg,
+                    "longitude_deg": sample.longitude_deg,
+                    "altitude_km": sample.altitude_km,
+                    "visual_position_km": list(sample.visual_position_km),
+                },
+                "quality": {
+                    "epoch_age_days": sample.epoch_age_days,
+                    "epoch_is_stale": sample.epoch_is_stale,
+                },
+            }
+            for sample in samples
+        ],
+    )
+
+
 def trajectory_to_json(
     element: OmmElementSet,
     samples: list[RealtimeSatelliteState],
@@ -437,6 +497,7 @@ def trajectory_to_json(
             "force_model": SGP4_FORCE_MODEL,
         },
         "samples": [state_to_json(sample) for sample in samples],
+        "trajectory": _realtime_trajectory_contract(element, samples),
     }
 
 

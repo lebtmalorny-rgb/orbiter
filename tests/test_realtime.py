@@ -218,3 +218,56 @@ def test_trajectory_json_includes_omm_element_parameters() -> None:
     assert profile["input_frame"] == "TEME"
     assert profile["input_time_system"] == "UTC"
     assert profile["mean_element_theory"] == "SGP4"
+
+
+def test_trajectory_json_adds_versioned_coordinate_sets_without_removing_legacy() -> None:
+    element = parse_omm_json(json.dumps(SAMPLE_OMM), source="sample-cache.json")[0]
+    samples = sample_realtime_trajectory(
+        element,
+        center_utc=parse_utc("2024-05-06T20:00:00+00:00"),
+        duration_min=1.0,
+        step_seconds=60.0,
+        max_epoch_age_days=None,
+    )
+
+    payload = trajectory_to_json(element, samples)
+    trajectory = payload["trajectory"]
+    first_contract_sample = trajectory["samples"][0]
+    first_state = samples[0]
+
+    assert trajectory["schema_version"] == 1
+    assert trajectory["id"] == "norad:25544"
+    assert trajectory["kind"] == "sgp4"
+    assert trajectory["time"]["scale"] == "UTC"
+    assert trajectory["coordinate_sets"]["orbit"] == {
+        "frame": "GCRS",
+        "position_unit": "km",
+        "velocity_unit": "km/s",
+    }
+    assert first_contract_sample["time_utc"] == first_state.sample_utc.isoformat()
+    assert first_contract_sample["orbit"]["position_km"] == list(
+        first_state.gcrs_position_km
+    )
+    assert first_contract_sample["orbit"]["velocity_km_s"] == list(
+        first_state.gcrs_velocity_km_s
+    )
+    assert first_contract_sample["ground_track"]["visual_position_km"] == list(
+        first_state.visual_position_km
+    )
+    assert (
+        first_contract_sample["ground_track"]["latitude_deg"]
+        == first_state.latitude_deg
+    )
+    assert first_contract_sample["quality"]["epoch_is_stale"] is False
+
+    assert {
+        "source",
+        "fetched_at_utc",
+        "satellite",
+        "model_profile",
+        "element_parameters",
+        "metadata",
+        "samples",
+    } <= payload.keys()
+    assert payload["samples"][0]["gcrs_position_km"] == first_state.gcrs_position_km
+    assert payload["samples"][0]["visual_position_km"] == first_state.visual_position_km
