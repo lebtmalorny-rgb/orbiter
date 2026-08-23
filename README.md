@@ -165,6 +165,17 @@ time scale, units, force model, input frame/time system/theory и epoch policy, 
 perigee, mean anomaly, BSTAR, revolution number и element set number. Эти
 параметры показываются поверх сцены Земли в карточке `NORAD / OMM`.
 
+Ответ также содержит additive-объект `trajectory` с
+`schema_version = 1`. Внутри него `coordinate_sets.orbit` хранит GCRS position
+и velocity в км и км/с, а `coordinate_sets.ground_track` отдельно описывает
+WGS84 latitude/longitude/altitude и `visual_position_km` на статичной
+сферической Земле. Такое разделение запрещает трактовать Earth-fixed projection
+и GCRS velocity как один физический state.
+
+На время миграции браузера прежние root-поля и плоские `samples` сохраняются.
+Они будут удаляться только отдельным изменением версии API после перевода
+frontend на `trajectory`.
+
 В браузере real-time движение сглаживается интерполяцией между соседними
 UTC-сэмплами SGP4. Это улучшает визуальную плавность, но не меняет источник
 истины: координаты по-прежнему приходят из Skyfield/SGP4, а точность зависит от
