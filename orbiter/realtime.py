@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 from skyfield.api import EarthSatellite, load, wgs84
 
 from .dynamics import R_EARTH, geodetic_surface_point
-from .trajectory import build_trajectory_contract
+from .trajectory import TrajectoryContractError, build_trajectory_contract
 
 CELESTRAK_GP_URL = "https://celestrak.org/NORAD/elements/gp.php"
 DEFAULT_CELESTRAK_GROUP = "STATIONS"
@@ -425,6 +425,8 @@ def _realtime_trajectory_contract(
     element: OmmElementSet,
     samples: list[RealtimeSatelliteState],
 ) -> dict[str, object]:
+    if not samples:
+        raise TrajectoryContractError("samples: must contain at least one sample")
     return build_trajectory_contract(
         trajectory_id=f"norad:{element.norad_cat_id}",
         name=element.name,

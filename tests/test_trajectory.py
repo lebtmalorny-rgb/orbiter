@@ -202,6 +202,25 @@ def test_sgp4_contract_requires_ground_track() -> None:
         build_trajectory_contract(**kwargs)
 
 
+def test_contract_rejects_null_ground_track_at_coordinate_set_path() -> None:
+    kwargs = valid_contract_kwargs()
+    kwargs["kind"] = "numerical"
+    kwargs["time"] = {"scale": "MODEL_ELAPSED", "sample_field": "t_seconds"}
+    kwargs["model"] = {"force_model": "two-body Earth point mass"}
+    kwargs["coordinate_sets"] = {
+        "orbit": kwargs["coordinate_sets"]["orbit"],
+        "ground_track": None,
+    }
+    kwargs["samples"] = [
+        {"t_seconds": 0.0, "orbit": kwargs["samples"][0]["orbit"]}
+    ]
+
+    with pytest.raises(
+        TrajectoryContractError, match=r"^coordinate_sets\.ground_track"
+    ):
+        build_trajectory_contract(**kwargs)
+
+
 def test_validate_rejects_changed_schema_version() -> None:
     contract = build_valid_contract()
     contract["schema_version"] = 2

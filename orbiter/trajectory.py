@@ -108,13 +108,14 @@ def _validate_coordinate_sets(contract: dict[str, object]) -> None:
     _string(orbit.get("position_unit"), "coordinate_sets.orbit.position_unit")
     _string(orbit.get("velocity_unit"), "coordinate_sets.orbit.velocity_unit")
 
-    ground_track_value = coordinate_sets.get("ground_track")
-    if contract.get("kind") == "sgp4" and ground_track_value is None:
-        raise _error("coordinate_sets.ground_track", "is required for SGP4")
-    if ground_track_value is None:
+    if "ground_track" not in coordinate_sets:
+        if contract.get("kind") == "sgp4":
+            raise _error("coordinate_sets.ground_track", "is required for SGP4")
         return
 
-    ground_track = _mapping(ground_track_value, "coordinate_sets.ground_track")
+    ground_track = _mapping(
+        coordinate_sets["ground_track"], "coordinate_sets.ground_track"
+    )
     _string(ground_track.get("frame"), "coordinate_sets.ground_track.frame")
     _string(ground_track.get("angle_unit"), "coordinate_sets.ground_track.angle_unit")
     _string(

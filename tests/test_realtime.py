@@ -20,6 +20,7 @@ from orbiter.realtime import (
     select_omm_element,
     trajectory_to_json,
 )
+from orbiter.trajectory import TrajectoryContractError
 
 SAMPLE_OMM = [
     {
@@ -271,3 +272,10 @@ def test_trajectory_json_adds_versioned_coordinate_sets_without_removing_legacy(
     } <= payload.keys()
     assert payload["samples"][0]["gcrs_position_km"] == first_state.gcrs_position_km
     assert payload["samples"][0]["visual_position_km"] == first_state.visual_position_km
+
+
+def test_trajectory_json_rejects_empty_samples_with_contract_error() -> None:
+    element = parse_omm_json(json.dumps(SAMPLE_OMM))[0]
+
+    with pytest.raises(TrajectoryContractError, match="samples"):
+        trajectory_to_json(element, [])
